@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from . import config as config_mod
 from . import db as db_mod
+from . import products as products_mod
 from . import tags as tags_mod
 from .carriers import CARRIER_NAMES, CARRIERS, CarrierError
 from .carriers import ghn, ghtk, viettelpost, jt, best
@@ -23,8 +24,51 @@ def _check_carrier(carrier):
     return None
 
 
-def create_shipment_for_order(order_id, carrier):
+def _order_weight_grams(order):
+    """Tính tổng trọng lượng (gram) từ items của đơn qua bảng products.
+
+    items trong đơn có dạng [{"sku": ..., "qty": ...}]. Nếu một SKU chưa có
+    trọng lượng hoặc không còn trong bảng products → trả None (hãng VC
+    sẽ dùng trọng lượng mặc định của nó).
+    """
+    import json
+    try:
+        items = order.get("items")
+        if isinstance(items, str):
+            items = json.loads(items or "[]")
+    except Exception:
+        return None
+    total = 0
+    found = False
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        sku = str(it.get("sku") or "").strip()
+        try:
+            qty = int(it.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if not sku or qty <= 0:
+            continue
+        prod = products_mod.get_by_sku(sku)
+        w = (prod or {}).get("weight_grams")
+        if w is None:
+            return None
+        try:
+            w = int(w)
+        except (TypeError, ValueError):
+            return None
+        total += w * qty
+        found = True
+    return total if found else None
+
+
+def create_shipment_for_order(order_id, carrier, weight_grams=None):
     """Tạo vận đơn cho đơn hàng — dùng chung cho route và quick-order.
+
+    weight_grams: trọng lượng tính sẵn (gram). Nếu không truyền, tự tra
+    từ bảng products theo SKU trong đơn. Nếu vẫn không có, các module
+    carrier dùng mặc định của chúng (hiện tại 500g).
 
     Trả về mã vận đơn. Raise ValueError với message tiếng Việt khi lỗi.
     """
@@ -38,6 +82,16 @@ def create_shipment_for_order(order_id, carrier):
         raise ValueError(
             f"Đơn này đã có mã vận đơn {order['shipping_code']} "
             f"({CARRIER_NAMES.get(carrier)}).")
+    # Đưa trọng lượng thực vào dict tạm cho carrier dùng (order.get("weight"))
+    weight = None
+    try:
+        weight = int(weight_grams) if weight_grams is not None else None
+    except (TypeError, ValueError):
+        weight = None
+    if not weight or weight <= 0:
+        weight = _order_weight_grams(order)
+    if weight and weight > 0:
+        order["weight"] = weight
     creds = config_mod.get_shipping_creds(carrier)
     module = MODULES[carrier]
     try:
@@ -86,6 +140,73 @@ def create_shipment(carrier):
     except Exception as e:
         return jsonify({"ok": False, "error_vi": f"Lỗi không xác định khi tạo đơn {CARRIER_NAMES.get(carrier)}: {e.__class__.__name__}"})
     return jsonify({"ok": True, "code": code})
+
+
+@shipping_bp.post("/api/shipments/bulk")
+def bulk_create_shipments():
+    """Đẩy vận đơn hàng loạt: {"order_ids": [1,2,3], "carrier": "jt"}.
+
+    - carrier phải thuộc CARRIERS; tối đa 100 đơn/lần.
+    - Đơn đã có shipping_code → bỏ qua (skipped, không đẩy lại).
+    - Lỗi từng đơn không làm dừng cả loạt. Lịch sử đẩy đơn vẫn được ghi
+      qua create_shipment_for_order (shipment_attempts).
+    """
+    body = request.get_json(silent=True) or {}
+    carrier = str(body.get("carrier") or "").strip().lower()
+    if carrier not in CARRIERS:
+        return _err(f"Hãng vận chuyển không hợp lệ: {carrier or '?'}. Chọn trong: {', '.join(CARRIERS)}.")
+    raw_ids = body.get("order_ids")
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return _err("Chưa chọn đơn nào để đẩy (order_ids trống).")
+    order_ids = []
+    seen = set()
+    for x in raw_ids:
+        try:
+            oid = int(x)
+        except (TypeError, ValueError):
+            return _err(f"order_id không hợp lệ: {x}.")
+        if oid <= 0:
+            return _err(f"order_id không hợp lệ: {x}.")
+        if oid not in seen:
+            seen.add(oid)
+            order_ids.append(oid)
+    if len(order_ids) > 100:
+        return _err("Mỗi lần chỉ đẩy tối đa 100 đơn. Hãy chia thành nhiều lượt.")
+
+    results = []
+    n_ok = n_fail = n_skip = 0
+    for oid in order_ids:
+        order = db_mod.get_order(oid)
+        if order is None:
+            results.append({"order_id": oid, "ok": False,
+                            "error_vi": "Không tìm thấy đơn hàng."})
+            n_fail += 1
+            continue
+        if order.get("shipping_code"):
+            results.append({"order_id": oid, "ok": False, "skipped": True,
+                            "error_vi": "Đã có mã vận đơn "
+                                        f"{order['shipping_code']} — bỏ qua, không đẩy lại."})
+            n_skip += 1
+            continue
+        try:
+            code = create_shipment_for_order(oid, carrier)
+        except ValueError as e:
+            results.append({"order_id": oid, "ok": False, "error_vi": str(e)})
+            n_fail += 1
+        except Exception as e:
+            results.append({"order_id": oid, "ok": False,
+                            "error_vi": f"Lỗi không xác định: {e.__class__.__name__}"})
+            n_fail += 1
+        else:
+            results.append({"order_id": oid, "ok": True, "shipping_code": code})
+            n_ok += 1
+    return jsonify({
+        "ok": True,
+        "carrier": carrier,
+        "results": results,
+        "summary": {"total": len(order_ids), "success": n_ok,
+                    "failed": n_fail, "skipped": n_skip},
+    })
 
 
 @shipping_bp.get("/api/shipping/<carrier>/track")

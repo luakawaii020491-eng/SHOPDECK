@@ -44,7 +44,8 @@ NEED_CONTRACT = ("J&T Express yêu cầu ký hợp đồng và customer code do 
 def _require_creds(creds):
     api_account = (creds.get("api_account") or "").strip()
     customer_code = (creds.get("customer_code") or "").strip()
-    private_key = (creds.get("private_key") or "").strip()
+    # Form Cài đặt lưu trường "api_key"; một số tài liệu gọi là "private_key" — chấp nhận cả hai.
+    private_key = (creds.get("private_key") or creds.get("api_key") or "").strip()
     if not api_account or not customer_code or not private_key:
         raise CarrierError(NEED_CONTRACT)
     return api_account, customer_code, private_key

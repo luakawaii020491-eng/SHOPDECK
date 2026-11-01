@@ -92,17 +92,30 @@
   </div>
 
   <div id="orderCount" style="margin-bottom:8px;color:var(--muted);font-size:13px"></div>
+  <div id="bulkBar" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+    <span id="bulkCount" style="font-size:13px;color:var(--muted)"></span>
+    <select id="bulkCarrier" style="max-width:180px">
+      <option value="ghn">GHN</option>
+      <option value="ghtk">GHTK</option>
+      <option value="viettelpost">Viettel Post</option>
+      <option value="jt" selected>J&T Express</option>
+      <option value="best">Best Express</option>
+    </select>
+    <button class="btn btn-primary" id="btnBulkShip">🚚 Đẩy đơn đã chọn</button>
+    <button class="btn btn-sm" id="btnBulkClear">Bỏ chọn</button>
+  </div>
   <div class="table-wrap">
     <table class="orders">
       <thead id="orderHead">
         <tr>
+          <th><input type="checkbox" id="chkAll" title="Chọn tất cả (trang này)"></th>
           <th>ID</th><th>Shop</th><th>Ngày</th><th>Khách</th><th>SĐT</th>
           <th>Địa chỉ</th><th>Mặt hàng</th><th>Tổng tiền</th>
           <th>Trạng thái</th><th>Hãng VC</th><th>Mã vận đơn</th><th>Thao tác</th>
         </tr>
       </thead>
       <tbody id="orderRows">
-        <tr><td colspan="12"><div class="state-loading"><span class="spinner"></span>Đang tải đơn hàng…</div></td></tr>
+        <tr><td colspan="13"><div class="state-loading"><span class="spinner"></span>Đang tải đơn hàng…</div></td></tr>
       </tbody>
     </table>
   </div>

@@ -19,14 +19,14 @@ async function loadProducts() {
   if (f.shop) qs.set("shop", f.shop);
   if (f.q) qs.set("q", f.q);
   const tbody = $("prodRows");
-  tbody.innerHTML = `<tr><td colspan="9"><div class="state-loading"><span class="spinner"></span>Đang tải sản phẩm…</div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10"><div class="state-loading"><span class="spinner"></span>Đang tải sản phẩm…</div></td></tr>`;
   try {
     const j = await api("/api/products?" + qs.toString());
     state.products = j.products || [];
     state.page = 0;
     renderProducts();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9"><div class="state-error">⚠️ ${esc(e.message)}
+    tbody.innerHTML = `<tr><td colspan="10"><div class="state-error">⚠️ ${esc(e.message)}
       <br><button class="btn btn-sm" style="margin-top:8px" onclick="loadProducts()">Thử lại</button></div></td></tr>`;
   }
 }
@@ -52,6 +52,13 @@ function imgCell(image) {
     onerror="this.outerHTML='<span style=&quot;color:var(--muted);font-size:12px&quot;>Lỗi ảnh</span>'">`;
 }
 
+function weightCell(w) {
+  if (w === null || w === undefined || w === "") {
+    return `<span style="color:var(--muted)">—</span>`;
+  }
+  return `<span style="white-space:nowrap">${Number(w)} g</span>`;
+}
+
 function renderProducts() {
   const tbody = $("prodRows");
   const total = state.products.length;
@@ -66,7 +73,7 @@ function renderProducts() {
   $("pgNext").disabled = state.page >= pages - 1;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9"><div class="state-empty">📭 Chưa có sản phẩm nào phù hợp.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10"><div class="state-empty">📭 Chưa có sản phẩm nào phù hợp.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map((p) => `
@@ -78,6 +85,7 @@ function renderProducts() {
       <td>${esc(p.size || "—")}</td>
       <td class="cell-money">${fmtMoney(p.price)}</td>
       <td>${stockBadge(p.stock)}</td>
+      <td>${weightCell(p.weight_grams)}</td>
       <td>${imgCell(p.image)}</td>
       <td>
         <div class="row-actions">
@@ -111,6 +119,7 @@ async function deleteProduct(id) {
 
 function productFormHtml(p = {}) {
   const stockVal = p.stock === null || p.stock === undefined ? "" : p.stock;
+  const weightVal = p.weight_grams === null || p.weight_grams === undefined ? "" : p.weight_grams;
   return `
     <div class="form-row">
       <div><label>Mã SKU *</label><input type="text" id="p_sku" value="${esc(p.sku || "")}"
@@ -135,6 +144,8 @@ function productFormHtml(p = {}) {
         min="0" placeholder="VD: 65000"></div>
       <div><label>Tồn kho (bỏ trống = không giới hạn)</label><input type="number" id="p_stock"
         value="${esc(String(stockVal))}" min="0" placeholder="Không giới hạn"></div>
+      <div><label>Trọng lượng (g/đôi, bỏ trống nếu chưa biết)</label><input type="number" id="p_weight"
+        value="${esc(String(weightVal))}" min="0" placeholder="VD: 450"></div>
     </div>
     <label>Tên file ảnh (trong thư mục static/)</label>
     <input type="text" id="p_image" value="${esc(p.image || "")}" placeholder="VD: dep_suc_den.jpg">
@@ -154,6 +165,7 @@ function openProductModal(id = null) {
     const sku = $("p_sku").value.trim();
     const name = $("p_name").value.trim();
     const stockRaw = $("p_stock").value.trim();
+    const weightRaw = $("p_weight").value.trim();
     const payload = {
       sku,
       shop: $("p_shop").value,
@@ -162,6 +174,7 @@ function openProductModal(id = null) {
       size: $("p_size").value.trim(),
       price: Number($("p_price").value) || 0,
       stock: stockRaw === "" ? null : Number(stockRaw),
+      weight_grams: weightRaw === "" ? null : Number(weightRaw),
       image: $("p_image").value.trim(),
       note: $("p_note").value.trim(),
     };

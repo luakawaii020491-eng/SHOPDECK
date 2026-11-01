@@ -2,7 +2,7 @@
  * tạo vận đơn + tra cứu 4 hãng VC. */
 "use strict";
 
-const state = { orders: [], page: 0, filter: { status: "", shop: "", q: "" }, view: "orders", attempts: [] };
+const state = { orders: [], page: 0, filter: { status: "", shop: "", q: "" }, view: "orders", attempts: [], selected: new Set() };
 const PER_PAGE = 20;
 const $ = (id) => document.getElementById(id);
 
@@ -33,13 +33,13 @@ async function loadOrders() {
   if (f.sku) qs.set("sku", f.sku);
   state.page = 0; // mỗi lần lọc mới -> về trang đầu
   const tbody = $("orderRows");
-  tbody.innerHTML = `<tr><td colspan="12"><div class="state-loading"><span class="spinner"></span>Đang tải đơn hàng…</div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="13"><div class="state-loading"><span class="spinner"></span>Đang tải đơn hàng…</div></td></tr>`;
   try {
     const j = await api("/api/orders?" + qs.toString());
     state.orders = j.orders || [];
     renderOrders();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="12"><div class="state-error">⚠️ ${esc(e.message)}
+    tbody.innerHTML = `<tr><td colspan="13"><div class="state-error">⚠️ ${esc(e.message)}
       <br><button class="btn btn-sm" style="margin-top:8px" onclick="loadOrders()">Thử lại</button></div></td></tr>`;
   }
 }
@@ -80,11 +80,12 @@ function renderOrders() {
     : "Chưa có đơn hàng nào phù hợp.";
   renderPager(pages);
   if (!slice.length) {
-    tbody.innerHTML = `<tr><td colspan="12"><div class="state-empty">📭 Chưa có đơn hàng nào phù hợp.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13"><div class="state-empty">📭 Chưa có đơn hàng nào phù hợp.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = slice.map((o) => `
     <tr data-id="${o.id}">
+      <td><input type="checkbox" class="row-chk" data-id="${o.id}"${state.selected.has(o.id) ? " checked" : ""} title="Chọn đơn #${o.id}"></td>
       <td class="cell-id">#${o.id}</td>
       <td>${shopBadge(SHOP_LABEL[o.shop] || o.shop)}</td>
       <td style="white-space:nowrap">${esc(fmtTime(o.created_at))}</td>
@@ -113,6 +114,18 @@ function renderOrders() {
   tbody.querySelectorAll(".status-select").forEach((sel) => {
     sel.addEventListener("change", () => quickStatus(Number(sel.dataset.id), sel.value));
   });
+  // Checkbox chọn đơn (giữ lựa chọn khi chuyển trang/lọc — lưu trong state.selected)
+  tbody.querySelectorAll(".row-chk").forEach((chk) => {
+    chk.addEventListener("change", () => {
+      const id = Number(chk.dataset.id);
+      if (chk.checked) state.selected.add(id);
+      else state.selected.delete(id);
+      syncChkAll();
+      updateBulkBar();
+    });
+  });
+  syncChkAll();
+  updateBulkBar();
   tbody.querySelectorAll("button[data-act]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = Number(btn.dataset.id);
@@ -468,6 +481,7 @@ async function _openShipModal(id) {
 
 const HEAD_ORDERS = `
         <tr>
+          <th><input type="checkbox" id="chkAll" title="Chọn tất cả (trang này)"></th>
           <th>ID</th><th>Shop</th><th>Ngày</th><th>Khách</th><th>SĐT</th>
           <th>Địa chỉ</th><th>Mặt hàng</th><th>Tổng tiền</th>
           <th>Trạng thái</th><th>Hãng VC</th><th>Mã vận đơn</th><th>Thao tác</th>
@@ -483,9 +497,90 @@ function setView(view) {
   $("tabOrders").className = "btn btn-sm" + (view === "orders" ? " btn-primary" : "");
   $("tabAttempts").className = "btn btn-sm" + (view === "attempts" ? " btn-primary" : "");
   document.querySelector(".toolbar").style.display = view === "orders" ? "" : "none";
+  $("bulkBar").style.display = view === "orders" && state.selected.size ? "flex" : "none";
   $("orderHead").innerHTML = view === "orders" ? HEAD_ORDERS : HEAD_ATTEMPTS;
-  if (view === "orders") loadOrders();
+  if (view === "orders") {
+    const chkAll = $("chkAll");
+    if (chkAll) chkAll.addEventListener("change", toggleSelectAll);
+    loadOrders();
+  }
   else loadAttempts();
+}
+
+/* ---------------- Đẩy đơn hàng loạt ---------------- */
+
+/** Đồng bộ trạng thái "chọn tất cả" theo trang hiện tại. */
+function syncChkAll() {
+  const chkAll = $("chkAll");
+  if (!chkAll) return;
+  const ids = state.orders
+    .slice(state.page * PER_PAGE, (state.page + 1) * PER_PAGE)
+    .map((o) => o.id);
+  chkAll.checked = ids.length > 0 && ids.every((id) => state.selected.has(id));
+}
+
+/** Bật/tắt chọn tất cả đơn trên trang hiện tại. */
+function toggleSelectAll() {
+  const chkAll = $("chkAll");
+  const ids = state.orders
+    .slice(state.page * PER_PAGE, (state.page + 1) * PER_PAGE)
+    .map((o) => o.id);
+  if (chkAll && chkAll.checked) ids.forEach((id) => state.selected.add(id));
+  else ids.forEach((id) => state.selected.delete(id));
+  renderOrders();
+}
+
+/** Hiện/ẩn thanh đẩy hàng loạt + cập nhật số lượng đã chọn. */
+function updateBulkBar() {
+  const bar = $("bulkBar");
+  if (!bar) return;
+  const n = state.selected.size;
+  bar.style.display = (state.view === "orders" && n > 0) ? "flex" : "none";
+  $("bulkCount").textContent = n ? `Đã chọn ${n} đơn` : "";
+  $("btnBulkShip").disabled = n === 0;
+}
+
+/** Gửi loạt đơn đã chọn sang hãng VC. */
+async function bulkShip() {
+  const ids = [...state.selected];
+  if (!ids.length) { toast("Chưa chọn đơn nào.", "warning"); return; }
+  const carrier = $("bulkCarrier").value;
+  const carrierLabel = (CARRIERS.find((c) => c.key === carrier) || {}).label || carrier;
+  if (!confirm(`Đẩy ${ids.length} đơn đã chọn qua ${carrierLabel}?`)) return;
+  const btn = $("btnBulkShip");
+  btn.disabled = true;
+  btn.textContent = "⏳ Đang đẩy…";
+  try {
+    const j = await api("/api/shipments/bulk", {
+      method: "POST",
+      body: JSON.stringify({ order_ids: ids, carrier }),
+    });
+    const s = (j && j.summary) || { total: ids.length, success: 0, failed: 0, skipped: 0 };
+    const failed = (j.results || []).filter((r) => !r.ok && !r.skipped);
+    const failedHtml = failed.length
+      ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px">${failed.map((r) =>
+          `<li>Đơn #${r.order_id}: ${esc(r.error_vi || "Lỗi")}</li>`).join("")}</ul>`
+      : "";
+    openModal("🚚 Kết quả đẩy đơn hàng loạt",
+      `<div class="test-result ${s.failed ? "fail" : "ok"}" style="font-size:15px;padding:12px">
+         ✅ Thành công: <b>${s.success}/${s.total}</b>
+         ${s.skipped ? ` · ⏭️ Đã có mã vận đơn: ${s.skipped}` : ""}
+         ${s.failed ? ` · ❌ Thất bại: ${s.failed}` : ""}
+       </div>${failedHtml}`,
+      `<button class="btn btn-primary" onclick="closeModal()">Đóng</button>`);
+    // Bỏ chọn những đơn đã xử lý xong (thành công hoặc đã có mã), giữ lại đơn lỗi để thử lại
+    (j.results || []).forEach((r) => {
+      if (r.ok || r.skipped) state.selected.delete(r.order_id);
+    });
+    loadOrders();
+    if (state.view === "attempts") loadAttempts();
+  } catch (e) {
+    toast(`❌ Đẩy loạt thất bại: ${e.message}`, "error", 8000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🚚 Đẩy đơn đã chọn";
+    updateBulkBar();
+  }
 }
 
 async function loadAttempts() {
@@ -545,6 +640,11 @@ $("fTag").addEventListener("change", loadOrders);
 $("fDateFrom").addEventListener("change", loadOrders);
 $("fDateTo").addEventListener("change", loadOrders);
 $("btnAdd").addEventListener("click", () => openOrderModal(null));
+$("btnBulkShip").addEventListener("click", bulkShip);
+$("btnBulkClear").addEventListener("click", () => {
+  state.selected.clear();
+  renderOrders();
+});
 $("tabOrders").addEventListener("click", () => setView("orders"));
 $("tabAttempts").addEventListener("click", () => setView("attempts"));
 
@@ -555,4 +655,8 @@ $("tabAttempts").addEventListener("click", () => setView("attempts"));
 })();
 
 loadTagOptions();
+(function wireChkAllInit() {
+  const chkAll = $("chkAll");
+  if (chkAll) chkAll.addEventListener("change", toggleSelectAll);
+})();
 loadOrders();

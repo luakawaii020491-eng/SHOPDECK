@@ -25,7 +25,9 @@ CARRIERS = ["ghn", "ghtk", "viettelpost", "jt", "best"]
 
 # Biến môi trường (dùng khi deploy lên host như Render — không lưu token vào repo):
 #   SHOPDESK_PAGES_JSON = '[{"page_id":"441747482366131","name":"Dép Hana","token":"..."}, ...]'
+#   SHOPDESK_SHIPPING_JSON = '{"jt":{"api_account":"...","customer_code":"...","api_key":"..."}}'
 PAGES_ENV_VAR = "SHOPDESK_PAGES_JSON"
+SHIPPING_ENV_VAR = "SHOPDESK_SHIPPING_JSON"
 
 
 def load_config():
@@ -66,6 +68,20 @@ def load_config():
                             "token": p.get("token", "") or "",
                         }
                 merged["pages"] = list(by_id.values())
+        except (json.JSONDecodeError, ValueError):
+            pass
+    # Gộp thông tin hãng vận chuyển từ biến môi trường (deploy cloud: key sống qua
+    # mỗi lần deploy, không phải nhập lại; env thắng từng field khi trùng hãng).
+    env_ship = os.environ.get(SHIPPING_ENV_VAR, "").strip()
+    if env_ship:
+        try:
+            parsed = json.loads(env_ship)
+            if isinstance(parsed, dict):
+                for carrier, fields in parsed.items():
+                    if carrier in CARRIERS and isinstance(fields, dict):
+                        for k, v in fields.items():
+                            if isinstance(v, str) and v.strip():
+                                merged["shipping"][carrier][k] = v.strip()
         except (json.JSONDecodeError, ValueError):
             pass
     return merged

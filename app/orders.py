@@ -236,6 +236,10 @@ def quick_order():
     except ValueError as e:
         return _err(str(e))
     total_qty = sum(l["qty"] for l in lines)
+    # Tổng trọng lượng theo SKU (gram). SKU chưa nhập trọng lượng tính là 0 —
+    # nếu mọi SKU đều chưa có, total_weight_grams = 0 và hãng VC sẽ dùng mặc định.
+    total_weight_grams = sum(
+        (int(l.get("weight_grams") or 0) * l["qty"]) for l in lines)
     total = subtotal + _quick_ship_fee(shop, total_qty)
     if shop == "xinh":
         # Dép Xinh: tổng đơn = COD làm tròn (1 đôi 80k, 2 đôi 100k, 3 đôi 150k)
@@ -293,7 +297,8 @@ def quick_order():
     if isinstance(cs, dict) and cs.get("carrier"):
         try:
             shipping_code = shipping_mod.create_shipment_for_order(
-                order_id, str(cs["carrier"]).lower())
+                order_id, str(cs["carrier"]).lower(),
+                weight_grams=total_weight_grams or None)
         except ValueError as e:
             shipment_error_vi = str(e)
         except Exception as e:
@@ -303,6 +308,7 @@ def quick_order():
         "ok": True,
         "order_id": order_id,
         "total": total,
+        "total_weight_grams": total_weight_grams,
         "shipping_code": shipping_code,
         "shipment_error_vi": shipment_error_vi,
     })

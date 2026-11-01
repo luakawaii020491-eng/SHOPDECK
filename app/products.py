@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS products (
     size TEXT DEFAULT '',
     price INTEGER DEFAULT 0,
     stock INTEGER NULL,
+    weight_grams INTEGER NULL,   -- gram mỗi đôi, NULL = chưa nhập
     image TEXT DEFAULT '',
     note TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
@@ -35,8 +36,10 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 """
 
-CREATABLE = {"sku", "name", "shop", "color", "size", "price", "stock", "image", "note"}
-UPDATABLE = {"sku", "name", "shop", "color", "size", "price", "stock", "image", "note"}
+CREATABLE = {"sku", "name", "shop", "color", "size", "price", "stock",
+             "weight_grams", "image", "note"}
+UPDATABLE = {"sku", "name", "shop", "color", "size", "price", "stock",
+             "weight_grams", "image", "note"}
 
 
 def _err(msg, code=400):
@@ -65,6 +68,14 @@ def _validate(data):
             return "Tồn kho không hợp lệ."
         if stock < 0:
             return "Tồn kho không được nhỏ hơn 0."
+    weight = data.get("weight_grams")
+    if weight not in (None, ""):
+        try:
+            weight = int(weight)
+        except (TypeError, ValueError):
+            return "Trọng lượng không hợp lệ."
+        if weight < 0:
+            return "Trọng lượng không được nhỏ hơn 0."
     return None
 
 
@@ -83,6 +94,7 @@ def _seed_rows():
                 "size": str(size),
                 "price": 65000,
                 "stock": None,
+                "weight_grams": None,  # user sẽ tự điền — không bịa
                 "image": f"dep_suc_{'den' if code == 'DEN' else 'nau' if code == 'NAU' else 'kem'}.jpg",
                 "note": "",
             })
@@ -96,6 +108,7 @@ def _seed_rows():
                 "size": str(size),
                 "price": 49000,
                 "stock": None,
+                "weight_grams": None,  # user sẽ tự điền — không bịa
                 "image": "dep_suc_3phan_all.jpg",
                 "note": "",
             })
@@ -111,6 +124,7 @@ def _seed_rows():
                 "size": str(size),
                 "price": 49000,
                 "stock": None,
+                "weight_grams": None,  # user sẽ tự điền — không bịa
                 "image": "dep_xinh_quai_ngang.jpg",
                 "note": "",
             })
@@ -122,16 +136,28 @@ def init_products():
     conn = db_mod._connect()
     try:
         conn.executescript(SCHEMA_PRODUCTS)
+        # Migration cho DB cũ (v5 trở xuống): bảng products chưa có cột weight_grams
+        try:
+            cols = {r["name"] for r in conn.execute(
+                "PRAGMA table_info(products)").fetchall()}
+        except Exception:
+            cols = set()
+        if "weight_grams" not in cols:
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN weight_grams INTEGER")
+            except sqlite3.OperationalError:
+                pass  # cột đã tồn tại do race-condition — bỏ qua
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             now = db_mod._now()
             for r in _seed_rows():
                 conn.execute(
                     """INSERT INTO products
-                       (sku, name, shop, color, size, price, stock, image, note, created_at, updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                       (sku, name, shop, color, size, price, stock, weight_grams,
+                        image, note, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (r["sku"], r["name"], r["shop"], r["color"], r["size"], r["price"],
-                     r["stock"], r["image"], r["note"], now, now),
+                     r["stock"], r.get("weight_grams"), r["image"], r["note"], now, now),
                 )
         conn.commit()
     finally:
@@ -146,6 +172,8 @@ def _norm(data, fields):
         if k == "price":
             out[k] = int(v or 0)
         elif k == "stock":
+            out[k] = None if v in (None, "") else int(v)
+        elif k == "weight_grams":
             out[k] = None if v in (None, "") else int(v)
         elif k == "shop":
             out[k] = str(v or "hana").lower()
@@ -174,7 +202,9 @@ def get_by_sku(sku):
 
 def resolve_items(items):
     """items = [{sku, qty}] → (lines, subtotal).
-    lines = [{sku, name, price, qty, line_total}]. Raise ValueError tiếng Việt khi lỗi."""
+    lines = [{sku, name, price, qty, line_total, weight_grams}].
+    weight_grams = gram mỗi đôi từ bảng products (None = chưa nhập).
+    Raise ValueError tiếng Việt khi lỗi."""
     lines = []
     subtotal = 0
     for it in items or []:
@@ -201,6 +231,7 @@ def resolve_items(items):
             "price": price,
             "qty": qty,
             "line_total": line_total,
+            "weight_grams": prod.get("weight_grams"),
         })
         subtotal += line_total
     return lines, subtotal
@@ -270,10 +301,12 @@ def create_product():
     try:
         cur = conn.execute(
             """INSERT INTO products
-               (sku, name, shop, color, size, price, stock, image, note, created_at, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               (sku, name, shop, color, size, price, stock, weight_grams,
+                image, note, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (data["sku"].strip(), data["name"], data["shop"], data["color"], data["size"],
-             data["price"], data["stock"], data["image"], data["note"], now, now),
+             data["price"], data["stock"], data["weight_grams"], data["image"],
+             data["note"], now, now),
         )
         conn.commit()
         return jsonify({"ok": True, "id": cur.lastrowid})
