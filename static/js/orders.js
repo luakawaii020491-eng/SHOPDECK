@@ -179,6 +179,7 @@ function orderFormHtml(o = {}) {
         <select id="e_shop">
           <option value="hana" ${(o.shop || "hana") === "hana" ? "selected" : ""}>Dép Hana</option>
           <option value="bedan" ${o.shop === "bedan" ? "selected" : ""}>Bé Đan</option>
+          <option value="xinh" ${o.shop === "xinh" ? "selected" : ""}>Dép Xinh</option>
         </select></div>
       <div><label>Trạng thái</label>
         <select id="e_status">
@@ -227,6 +228,7 @@ function orderAddFormHtml() {
         <select id="e_shop">
           <option value="hana">Dép Hana</option>
           <option value="bedan">Bé Đan</option>
+          <option value="xinh">Dép Xinh</option>
         </select></div>
       <div><label>Trạng thái</label>
         <select id="e_status">

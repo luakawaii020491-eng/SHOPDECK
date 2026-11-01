@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_attempts_created ON shipment_attempts(created_at 
 """
 
 VALID_STATUS = {"new", "pending", "shipped", "done", "cancelled"}
-VALID_SHOP = {"hana", "bedan"}
+VALID_SHOP = {"hana", "bedan", "xinh"}
 
 
 def _connect():
@@ -86,7 +86,7 @@ def create_order(data):
     data = data or {}
     shop = str(data.get("shop", "hana")).lower()
     if shop not in VALID_SHOP:
-        raise ValueError("shop phải là 'hana' hoặc 'bedan'")
+        raise ValueError("shop phải là 'hana', 'bedan' hoặc 'xinh'")
     status = str(data.get("status", "new")).lower()
     if status not in VALID_STATUS:
         raise ValueError("status không hợp lệ")
@@ -204,7 +204,7 @@ def update_order(order_id, patch):
     if not patch:
         return False
     if "shop" in patch and str(patch["shop"]).lower() not in VALID_SHOP:
-        raise ValueError("shop phải là 'hana' hoặc 'bedan'")
+        raise ValueError("shop phải là 'hana', 'bedan' hoặc 'xinh'")
     if "status" in patch and str(patch["status"]).lower() not in VALID_STATUS:
         raise ValueError("status không hợp lệ")
     if "items" in patch and not isinstance(patch["items"], str):

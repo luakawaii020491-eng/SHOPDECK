@@ -13,7 +13,7 @@ from . import tags as tags_mod
 
 orders_bp = Blueprint("orders", __name__)
 
-SHOP_VI = {"hana": "Dép Hana", "bedan": "Bé Đan"}
+SHOP_VI = {"hana": "Dép Hana", "bedan": "Bé Đan", "xinh": "Dép Xinh"}
 STATUS_VI = {
     "new": "Mới",
     "pending": "Chờ xử lý",
@@ -146,6 +146,9 @@ def export_csv():
 # ---- Bảng giá gợi ý ----
 # hana: 1 đôi = 90000 (65k+25k ship); >=2 đôi = 65000*N miễn ship
 # bedan: 1 đôi = 79000 (49k+30k ship); 2 đôi = 99000 miễn ship; >=3 đôi = 139000 miễn ship
+# xinh: COD làm tròn theo yêu cầu chủ shop (2026-11-01):
+#   1 đôi = 80000 (49k+30k ship=79k, làm tròn); 2 đôi = 100000 (99k, làm tròn);
+#   3 đôi = 150000 miễn ship; >3 đôi = 150k + 50k/đôi thêm, miễn ship
 
 def _suggest(shop, qty):
     if shop == "hana":
@@ -162,7 +165,18 @@ def _suggest(shop, qty):
         if qty == 2:
             return 99000, "2 đôi: 99k, miễn ship."
         return 139000, f"{qty} đôi: 139k, miễn ship."
-    return None, "shop phải là 'hana' hoặc 'bedan'."
+    if shop == "xinh":
+        if qty <= 0:
+            return None, "Số lượng phải lớn hơn 0."
+        if qty == 1:
+            return 80000, "1 đôi: 49k + 30k ship = 79k, COD làm tròn 80k."
+        if qty == 2:
+            return 100000, "2 đôi: 99k miễn ship, COD làm tròn 100k."
+        if qty == 3:
+            return 150000, "3 đôi: 150k miễn ship."
+        extra = qty - 3
+        return 150000 + 50000 * extra, f"{qty} đôi: 150k + 50k × {extra} đôi thêm, miễn ship."
+    return None, "shop phải là 'hana', 'bedan' hoặc 'xinh'."
 
 
 @orders_bp.get("/api/price_suggest")
@@ -183,13 +197,17 @@ def price_suggest():
 # body: {shop, customer_name, phone, address, items: [{sku, qty}],
 #        notes, source_thread, create_shipment: {carrier} | null}
 # Tổng = Σ(giá SKU × số lượng) + ship (hana: 1 đôi +25k, ≥2 đôi free;
-#        bedan: 1 đôi +30k, ≥2 đôi free).
+#        bedan: 1 đôi +30k, ≥2 đôi free; xinh: 1 đôi +30k, ≥2 đôi free).
 # Lưu ý: Bé Đan 2 đôi theo công thức này = 98k (2×49k), trong khi giá bán
 # lẻ cho khách là 99k — nhân viên kiểm tra lại tổng trước khi xác nhận.
+# Dép Xinh: tổng đơn = COD làm tròn (chủ shop 2026-11-01): 1 đôi 80k,
+# 2 đôi 100k, 3 đôi 150k — ghi đè công thức Σ giá SKU + ship.
 
 def _quick_ship_fee(shop, total_qty):
     if shop == "hana":
         return 25000 if total_qty == 1 else 0
+    if shop == "xinh":
+        return 30000 if total_qty == 1 else 0
     return 30000 if total_qty == 1 else 0
 
 
@@ -201,7 +219,7 @@ def quick_order():
     body = request.get_json(silent=True) or {}
     shop = str(body.get("shop") or "hana").lower()
     if shop not in db_mod.VALID_SHOP:
-        return _err("shop phải là 'hana' hoặc 'bedan'.")
+        return _err("shop phải là 'hana', 'bedan' hoặc 'xinh'.")
     items_in = body.get("items") or []
     if not isinstance(items_in, list) or not items_in:
         return _err("Chưa chọn sản phẩm nào (items trống).")
@@ -219,6 +237,11 @@ def quick_order():
         return _err(str(e))
     total_qty = sum(l["qty"] for l in lines)
     total = subtotal + _quick_ship_fee(shop, total_qty)
+    if shop == "xinh":
+        # Dép Xinh: tổng đơn = COD làm tròn (1 đôi 80k, 2 đôi 100k, 3 đôi 150k)
+        cod, _note = _suggest(shop, total_qty)
+        if cod:
+            total = cod
 
     # 2. Trừ tồn kho (resolve đã kiểm tra đủ hàng)
     try:

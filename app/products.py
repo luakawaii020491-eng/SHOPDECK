@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Quản lý sản phẩm theo mã SKU (Dép Hana & Bé Đan).
+"""Quản lý sản phẩm theo mã SKU (Dép Hana, Bé Đan & Dép Xinh).
 
 - Bảng `products`: sku duy nhất, giá theo đôi, stock NULL = không giới hạn.
-- `init_products()` tạo bảng (idempotent) + seed 30 SKU khi bảng còn trống.
+- `init_products()` tạo bảng (idempotent) + seed 42 SKU khi bảng còn trống.
 - Blueprint `products_bp`: CRUD qua /api/products*.
 - Helpers cho chốt đơn nhanh: get_by_sku(), resolve_items(), decrement_stock().
 """
@@ -14,8 +14,8 @@ from . import db as db_mod
 
 products_bp = Blueprint("products", __name__)
 
-VALID_SHOP = {"hana", "bedan"}
-SHOP_VI = {"hana": "Dép Hana", "bedan": "Bé Đan"}
+VALID_SHOP = {"hana", "bedan", "xinh"}
+SHOP_VI = {"hana": "Dép Hana", "bedan": "Bé Đan", "xinh": "Dép Xinh"}
 
 SCHEMA_PRODUCTS = """
 CREATE TABLE IF NOT EXISTS products (
@@ -50,7 +50,7 @@ def _validate(data):
         return "Vui lòng nhập mã SKU."
     shop = str(data.get("shop") or "hana").lower()
     if shop not in VALID_SHOP:
-        return "Shop phải là 'hana' hoặc 'bedan'."
+        return "Shop phải là 'hana', 'bedan' hoặc 'xinh'."
     try:
         price = int(data.get("price") or 0)
     except (TypeError, ValueError):
@@ -69,7 +69,8 @@ def _validate(data):
 
 
 def _seed_rows():
-    """30 SKU mặc định: 15 Hana (dép sục khoét lỗ, 65k) + 15 Bé Đan (dép sục đế 3 phân, 49k)."""
+    """42 SKU mặc định: 15 Hana (dép sục khoét lỗ, 65k) + 15 Bé Đan
+    (dép sục đế 3 phân, 49k) + 12 Dép Xinh (dép nữ quai ngang, 49k)."""
     rows = []
     colors = [("DEN", "Đen"), ("NAU", "Nâu"), ("KEM", "Kem")]
     for code, vi in colors:
@@ -98,11 +99,26 @@ def _seed_rows():
                 "image": "dep_suc_3phan_all.jpg",
                 "note": "",
             })
+    # Dép Xinh — dép nữ quai ngang siêu êm, 49k/đôi, size 36–39
+    # Giá COD làm tròn (chủ shop 2026-11-01): 1 đôi 80k, 2 đôi 100k, 3 đôi 150k
+    for code, vi in colors:
+        for size in range(36, 40):
+            rows.append({
+                "sku": f"XINH-QN-{code}-{size}",
+                "name": "Dép nữ quai ngang siêu êm",
+                "shop": "xinh",
+                "color": vi,
+                "size": str(size),
+                "price": 49000,
+                "stock": None,
+                "image": "dep_xinh_quai_ngang.jpg",
+                "note": "",
+            })
     return rows
 
 
 def init_products():
-    """Tạo bảng + index (idempotent). Seed 30 SKU mặc định chỉ khi bảng còn trống."""
+    """Tạo bảng + index (idempotent). Seed 42 SKU mặc định chỉ khi bảng còn trống."""
     conn = db_mod._connect()
     try:
         conn.executescript(SCHEMA_PRODUCTS)

@@ -119,6 +119,7 @@ function productFormHtml(p = {}) {
         <select id="p_shop">
           <option value="hana" ${(p.shop || "hana") === "hana" ? "selected" : ""}>Dép Hana</option>
           <option value="bedan" ${p.shop === "bedan" ? "selected" : ""}>Bé Đan</option>
+          <option value="xinh" ${p.shop === "xinh" ? "selected" : ""}>Dép Xinh</option>
         </select></div>
     </div>
     <label>Tên sản phẩm *</label>
