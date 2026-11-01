@@ -46,19 +46,26 @@ def load_config():
         for c in CARRIERS:
             if isinstance(ship.get(c), dict):
                 merged["shipping"][c].update(ship[c])
-    # Ghi đè danh sách page từ biến môi trường (deploy cloud: token sống qua
-    # mỗi lần deploy, không phải nhập lại; vẫn chỉnh được ở trang Settings).
+    # Gộp danh sách page từ biến môi trường vào (deploy cloud: token trong env
+    # sống qua mỗi lần deploy, không phải nhập lại). Env thắng khi trùng page_id;
+    # page chỉ có trong file (thêm qua trang Settings) vẫn hiện bình thường.
+    # LƯU Ý: xóa page đang có trong env thì phải sửa env var — xóa ở Settings
+    # chỉ có tác dụng với page thêm qua Settings.
     env_pages = os.environ.get(PAGES_ENV_VAR, "").strip()
     if env_pages:
         try:
             parsed = json.loads(env_pages)
             if isinstance(parsed, list) and parsed:
-                merged["pages"] = [
-                    {"page_id": str(p.get("page_id", "")),
-                     "name": p.get("name", "") or "",
-                     "token": p.get("token", "") or ""}
-                    for p in parsed if isinstance(p, dict) and p.get("page_id")
-                ]
+                by_id = {str(p.get("page_id")): p for p in merged["pages"]
+                         if p.get("page_id")}
+                for p in parsed:
+                    if isinstance(p, dict) and p.get("page_id"):
+                        by_id[str(p["page_id"])] = {
+                            "page_id": str(p.get("page_id", "")),
+                            "name": p.get("name", "") or "",
+                            "token": p.get("token", "") or "",
+                        }
+                merged["pages"] = list(by_id.values())
         except (json.JSONDecodeError, ValueError):
             pass
     return merged
