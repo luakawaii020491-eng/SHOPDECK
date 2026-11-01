@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Khách hàng — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-page="customers">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links"><a href="/" data-nav="inbox">📥 Inbox</a><a href="/orders" data-nav="orders">🧾 Đơn hàng</a><a href="/products" data-nav="products">📦 Sản phẩm</a><a href="/customers" data-nav="customers">👥 Khách hàng</a><a href="/settings" data-nav="settings">⚙️ Cài đặt</a></div>
+</nav>
+
+<main class="page">
+  <h1>👥 Khách hàng</h1>
+
+  <div class="toolbar">
+    <div class="field" style="min-width:260px">
+      <label>Tìm kiếm</label>
+      <input type="text" id="fSearch" placeholder="Tên hoặc số điện thoại…">
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn" id="btnFilter">🔍 Lọc</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn btn-primary" id="btnAdd">➕ Thêm khách hàng</button>
+    </div>
+  </div>
+
+  <div id="custCount" style="margin-bottom:8px;color:var(--muted);font-size:13px"></div>
+  <div class="table-wrap">
+    <table class="customers">
+      <thead>
+        <tr>
+          <th>Tên</th><th>SĐT</th><th>Địa chỉ</th><th>Shop</th>
+          <th>Ghi chú</th><th>Ngày tạo</th><th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="custRows">
+        <tr><td colspan="7"><div class="state-loading"><span class="spinner"></span>Đang tải danh sách khách hàng…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="pagination" style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end"></div>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/customers.js"></script>
+</body>
+</html>

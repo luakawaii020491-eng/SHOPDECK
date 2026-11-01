@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cài đặt — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-page="settings">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links">
+    <a href="/" data-nav="inbox">📥 Inbox</a>
+    <a href="/orders" data-nav="orders">🧾 Đơn hàng</a>
+    <a href="/products" data-nav="products">📦 Sản phẩm</a>
+    <a href="/customers" data-nav="customers">👥 Khách hàng</a>
+    <a href="/settings" data-nav="settings">⚙️ Cài đặt</a>
+  </div>
+</nav>
+
+<main class="page">
+  <h1>⚙️ Cài đặt</h1>
+
+  <section class="card">
+    <h2>📄 Fanpage Facebook</h2>
+    <div id="pageList">
+      <div class="state-loading"><span class="spinner"></span>Đang tải danh sách page…</div>
+    </div>
+    <h3 style="margin-top:18px;font-size:15px">➕ Thêm page mới</h3>
+    <div class="form-row">
+      <div><label>Page ID *</label><input type="text" id="p_id" placeholder="VD: 441747482366131"></div>
+      <div><label>Tên page *</label><input type="text" id="p_name" placeholder="VD: Dép Hana"></div>
+    </div>
+    <label>Page Access Token *</label>
+    <input type="password" id="p_token" placeholder="Dán page access token vào đây">
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" id="btnAddPage">Thêm page</button>
+      <span style="font-size:12.5px;color:var(--muted)">Token lưu trong config.json của máy chủ, không hiển thị lại.</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>🚚 Vận chuyển — API key các hãng</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0">
+      Key chỉ lưu trên máy chủ (config.json), không bao giờ hiển thị lại. Nhập key mới sẽ ghi đè key cũ.
+    </p>
+    <div id="carrierList">
+      <div class="state-loading"><span class="spinner"></span>Đang tải trạng thái hãng vận chuyển…</div>
+    </div>
+  </section>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/settings.js"></script>
+</body>
+</html>

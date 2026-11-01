@@ -1,0 +1,21 @@
+[Unit]
+Description=ShopDesk - Quan ly ban hang Dep Hana & Be Dan
+After=network.target
+
+[Service]
+Type=simple
+# Thay /opt/shopdesk bằng đường dẫn thực tế nơi bạn giải nén code
+WorkingDirectory=/opt/shopdesk
+# Chạy production bằng waitress (lắng nghe nội bộ, nginx đứng trước)
+ExecStart=/opt/shopdesk/venv/bin/waitress-serve --listen=127.0.0.1:8000 --threads=4 app:app
+Restart=always
+RestartSec=5
+# Chạy dưới user thường, KHÔNG dùng root
+User=shopdesk
+Group=shopdesk
+# Log ra journald: xem bằng `journalctl -u shopdesk -f`
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sản phẩm — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-page="products">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links"><a href="/" data-nav="inbox">📥 Inbox</a><a href="/orders" data-nav="orders">🧾 Đơn hàng</a><a href="/products" data-nav="products">📦 Sản phẩm</a><a href="/customers" data-nav="customers">👥 Khách hàng</a><a href="/settings" data-nav="settings">⚙️ Cài đặt</a></div>
+</nav>
+
+<main class="page">
+  <h1>📦 Sản phẩm</h1>
+
+  <div class="toolbar">
+    <div class="field">
+      <label>Shop</label>
+      <select id="fShop">
+        <option value="">Tất cả</option>
+        <option value="hana">Dép Hana</option>
+        <option value="bedan">Bé Đan</option>
+      </select>
+    </div>
+    <div class="field" style="min-width:260px">
+      <label>Tìm kiếm</label>
+      <input type="text" id="fSearch" placeholder="Mã SKU, tên sản phẩm…">
+    </div>
+    <div class="spacer"></div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn btn-primary" id="btnAdd">➕ Thêm sản phẩm</button>
+    </div>
+  </div>
+
+  <div id="prodCount" style="margin-bottom:8px;color:var(--muted);font-size:13px"></div>
+  <div class="table-wrap">
+    <table class="products">
+      <thead>
+        <tr>
+          <th>SKU</th><th>Tên</th><th>Shop</th><th>Màu</th><th>Size</th>
+          <th>Giá</th><th>Tồn kho</th><th>Ảnh</th><th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="prodRows">
+        <tr><td colspan="9"><div class="state-loading"><span class="spinner"></span>Đang tải sản phẩm…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager" style="margin-top:12px;display:flex;align-items:center;gap:8px">
+    <button class="btn btn-sm" id="pgPrev">◀ Trước</button>
+    <span id="pgInfo" style="font-size:13px;color:var(--muted)"></span>
+    <button class="btn btn-sm" id="pgNext">Sau ▶</button>
+  </div>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/products.js"></script>
+</body>
+</html>

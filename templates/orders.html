@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đơn hàng — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-page="orders">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links">
+    <a href="/" data-nav="inbox">📥 Inbox</a>
+    <a href="/orders" data-nav="orders">🧾 Đơn hàng</a>
+    <a href="/products" data-nav="products">📦 Sản phẩm</a>
+    <a href="/customers" data-nav="customers">👥 Khách hàng</a>
+    <a href="/settings" data-nav="settings">⚙️ Cài đặt</a>
+  </div>
+</nav>
+
+<main class="page">
+  <h1>🧾 Đơn hàng</h1>
+
+  <div class="toolbar">
+    <div class="field">
+      <label>Trạng thái</label>
+      <select id="fStatus">
+        <option value="">Tất cả</option>
+        <option value="new">Mới</option>
+        <option value="pending">Chờ xác nhận</option>
+        <option value="shipped">Đã gửi</option>
+        <option value="done">Hoàn thành</option>
+        <option value="cancelled">Hủy</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Shop</label>
+      <select id="fShop">
+        <option value="">Tất cả</option>
+        <option value="hana">Dép Hana</option>
+        <option value="bedan">Bé Đan</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>SĐT</label>
+      <select id="fPhone">
+        <option value="">Tất cả</option>
+        <option value="true">Có SĐT</option>
+        <option value="false">Thiếu SĐT</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Hashtag</label>
+      <select id="fTag">
+        <option value="">Tất cả</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Từ ngày</label>
+      <input type="date" id="fDateFrom">
+    </div>
+    <div class="field">
+      <label>Đến ngày</label>
+      <input type="date" id="fDateTo">
+    </div>
+    <div class="field" style="min-width:180px">
+      <label>Mã SKU</label>
+      <input type="text" id="fSku" placeholder="VD: HANA-SUC-DEN-37">
+    </div>
+    <div class="field" style="min-width:220px">
+      <label>Tìm kiếm</label>
+      <input type="text" id="fSearch" placeholder="Tên, SĐT, địa chỉ…">
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn" id="btnFilter">🔍 Lọc</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <div style="display:flex;gap:8px">
+        <a class="btn" href="/api/orders/export.csv">⬇️ Xuất CSV</a>
+        <button class="btn btn-primary" id="btnAdd">➕ Thêm đơn</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="view-tabs" style="margin:12px 0 4px;display:flex;gap:8px">
+    <button class="btn btn-sm btn-primary" id="tabOrders">🧾 Đơn hàng</button>
+    <button class="btn btn-sm" id="tabAttempts">📜 Lịch sử đẩy đơn</button>
+  </div>
+
+  <div id="orderCount" style="margin-bottom:8px;color:var(--muted);font-size:13px"></div>
+  <div class="table-wrap">
+    <table class="orders">
+      <thead id="orderHead">
+        <tr>
+          <th>ID</th><th>Shop</th><th>Ngày</th><th>Khách</th><th>SĐT</th>
+          <th>Địa chỉ</th><th>Mặt hàng</th><th>Tổng tiền</th>
+          <th>Trạng thái</th><th>Hãng VC</th><th>Mã vận đơn</th><th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="orderRows">
+        <tr><td colspan="12"><div class="state-loading"><span class="spinner"></span>Đang tải đơn hàng…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="pager" class="pager"></div>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/orders.js"></script>
+</body>
+</html>

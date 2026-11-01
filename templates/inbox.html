@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inbox — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-page="inbox">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links">
+    <a href="/" data-nav="inbox">📥 Inbox</a>
+    <a href="/orders" data-nav="orders">🧾 Đơn hàng</a>
+    <a href="/products" data-nav="products">📦 Sản phẩm</a>
+    <a href="/customers" data-nav="customers">👥 Khách hàng</a>
+    <a href="/settings" data-nav="settings">⚙️ Cài đặt</a>
+  </div>
+</nav>
+
+<main class="inbox-layout">
+  <aside class="conv-list-panel">
+    <div class="conv-list-header">
+      <h2>Hội thoại</h2>
+      <span id="convCount" class="count">0</span>
+    </div>
+    <div class="conv-filters">
+      <select id="tagFilter" title="Lọc theo tag"></select>
+      <select id="replyFilter" title="Lọc theo trạng thái trả lời">
+        <option value="">💬 Tất cả</option>
+        <option value="unreplied">💬 Chưa trả lời</option>
+        <option value="replied">💬 Đã trả lời</option>
+      </select>
+    </div>
+    <div id="pageStatus" class="page-status"></div>
+    <div id="convList" class="conv-list">
+      <div class="state-loading"><span class="spinner"></span>Đang tải hội thoại…</div>
+    </div>
+  </aside>
+
+  <section class="chat-panel">
+    <div id="chatHeader" class="chat-header">
+      <div class="empty-hint">👈 Chọn một hội thoại ở cột bên trái để bắt đầu</div>
+    </div>
+    <div id="chatMessages" class="chat-messages">
+      <div class="state-empty">Chưa có tin nhắn nào.</div>
+    </div>
+    <div class="chat-input-bar">
+      <div class="img-dropdown-wrap">
+        <button id="btnImg" class="btn btn-ghost" title="Gửi ảnh sản phẩm nhanh" disabled>📷 Ảnh nhanh</button>
+        <div id="imgDropdown" class="img-dropdown hidden"></div>
+      </div>
+      <button id="btnOrder" class="btn btn-ghost" title="Tạo đơn hàng từ hội thoại này" disabled>🧾 Tạo đơn</button>
+      <input id="msgInput" type="text" placeholder="Nhập tin nhắn…" autocomplete="off" disabled>
+      <button id="btnSend" class="btn btn-primary" disabled>Gửi</button>
+    </div>
+  </section>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/inbox.js"></script>
+</body>
+</html>

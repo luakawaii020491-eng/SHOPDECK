@@ -1,0 +1,13 @@
+# Render Blueprint cho ShopDesk
+# Dùng khi deploy bằng "New → Blueprint" trên Render.
+services:
+  - type: web
+    name: shopdesk
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # waitress đọc port từ biến $PORT do Render cấp
+    startCommand: waitress-serve --listen=0.0.0.0:$PORT --call 'app:create_app'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
