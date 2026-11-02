@@ -25,11 +25,19 @@ DEFAULT_CONFIG = {
         "sender_phone": "",
         "sender_address": "",
     },
+    # Facebook App dùng cho luồng "Kết nối Facebook" kiểu Sapo (OAuth → quét page → cấp quyền)
+    "facebook": {
+        "app_id": "",
+        "app_secret": "",
+    },
 }
 
 # Env var cho thông tin người gửi (deploy cloud: sống qua redeploy):
 #   SHOPDESK_SENDER_JSON = '{"shop_name":"...","sender_phone":"...","sender_address":"..."}'
 SENDER_ENV_VAR = "SHOPDESK_SENDER_JSON"
+# Env var cho Facebook App (OAuth connect):
+#   SHOPDESK_FB_JSON = '{"app_id":"...","app_secret":"..."}'
+FB_ENV_VAR = "SHOPDESK_FB_JSON"
 
 CARRIERS = ["ghn", "ghtk", "viettelpost", "jt", "best"]
 
@@ -63,6 +71,11 @@ def load_config():
             for k in merged["sender"]:
                 if isinstance(sender.get(k), str) and sender[k].strip():
                     merged["sender"][k] = sender[k].strip()
+        fb = cfg.get("facebook") or {}
+        if isinstance(fb, dict):
+            for k in merged["facebook"]:
+                if isinstance(fb.get(k), str) and fb[k].strip():
+                    merged["facebook"][k] = fb[k].strip()
     # Gộp danh sách page từ biến môi trường vào (deploy cloud: token trong env
     # sống qua mỗi lần deploy, không phải nhập lại). Env thắng khi trùng page_id;
     # page chỉ có trong file (thêm qua trang Settings) vẫn hiện bình thường.
@@ -109,6 +122,18 @@ def load_config():
                     v = parsed.get(k)
                     if isinstance(v, str) and v.strip():
                         merged["sender"][k] = v.strip()
+        except (json.JSONDecodeError, ValueError):
+            pass
+    # Gộp Facebook App từ biến môi trường
+    env_fb = os.environ.get(FB_ENV_VAR, "").strip()
+    if env_fb:
+        try:
+            parsed = json.loads(env_fb)
+            if isinstance(parsed, dict):
+                for k in merged["facebook"]:
+                    v = parsed.get(k)
+                    if isinstance(v, str) and v.strip():
+                        merged["facebook"][k] = v.strip()
         except (json.JSONDecodeError, ValueError):
             pass
     return merged
@@ -202,3 +227,34 @@ def set_sender(fields):
     cfg["sender"] = cur
     save_config(cfg)
     return cur
+
+
+# ---- Facebook App (luồng Kết nối Facebook kiểu Sapo) ----
+
+FB_FIELDS = ["app_id", "app_secret"]
+
+
+def get_fb_app(masked=False):
+    """Trả về {"app_id": ..., "app_secret": ...}; masked=True thì che secret."""
+    cfg = load_config()
+    fb = dict(cfg.get("facebook") or {})
+    if masked and fb.get("app_secret"):
+        fb["app_secret"] = "••••••"
+    return fb
+
+
+def set_fb_app(fields):
+    cfg = load_config()
+    cur = cfg.get("facebook") or {}
+    for k, v in (fields or {}).items():
+        if k not in FB_FIELDS:
+            continue
+        v = str(v or "").strip()
+        # Chuỗi rỗng = xóa field
+        if v == "":
+            cur.pop(k, None)
+        else:
+            cur[k] = v
+    cfg["facebook"] = cur
+    save_config(cfg)
+    return get_fb_app(masked=True)

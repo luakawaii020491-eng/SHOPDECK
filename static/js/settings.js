@@ -286,3 +286,53 @@ async function saveSender() {
 
 $("btnSaveSender").addEventListener("click", saveSender);
 loadSender();
+
+/* ---------------- Kết nối Facebook (kiểu Sapo) ---------------- */
+
+async function loadFbApp() {
+  try {
+    const j = await api("/api/connect/facebook/app");
+    $("fb_app_id").value = j.app_id || "";
+    $("fb_redirect").value = j.redirect_uri || "";
+    if (j.app_secret_set) $("fb_app_secret").value = "••••••";
+  } catch (e) { $("fb_redirect").value = "Không tải được."; }
+}
+
+async function saveFbApp() {
+  const msg = $("fbMsg");
+  msg.textContent = "⏳ Đang lưu…"; msg.style.color = "var(--muted)";
+  try {
+    const j = await api("/api/connect/facebook/app", {
+      method: "POST",
+      body: JSON.stringify({ app_id: $("fb_app_id").value.trim(), app_secret: $("fb_app_secret").value }),
+    });
+    if (j.ok) {
+      msg.textContent = "✅ Đã lưu.";
+      msg.style.color = "var(--success)";
+      toast("Đã lưu Facebook App ✓", "success");
+      loadFbApp();
+    } else { msg.textContent = "❌ " + (j.error_vi || "Lưu thất bại."); msg.style.color = "var(--danger)"; }
+  } catch (e) { msg.textContent = "❌ " + e.message; msg.style.color = "var(--danger)"; }
+}
+
+async function fbConnect() {
+  const msg = $("fbMsg");
+  msg.textContent = "⏳ Đang mở Facebook…"; msg.style.color = "var(--muted)";
+  try {
+    const j = await api("/api/connect/facebook/start");
+    if (j.ok && j.url) { location.href = j.url; return; }
+    msg.textContent = "❌ " + (j.error_vi || "Không tạo được link kết nối.");
+    msg.style.color = "var(--danger)";
+  } catch (e) { msg.textContent = "❌ " + e.message; msg.style.color = "var(--danger)"; }
+}
+
+$("btnSaveFbApp").addEventListener("click", saveFbApp);
+$("btnFbConnect").addEventListener("click", fbConnect);
+$("btnCopyRedirect").addEventListener("click", () => {
+  const el = $("fb_redirect");
+  el.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  if (navigator.clipboard) navigator.clipboard.writeText(el.value).catch(() => {});
+  toast("Đã copy redirect URI ✓", "success");
+});
+loadFbApp();

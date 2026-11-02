@@ -1,16 +1,31 @@
-/* ShopDesk — Inbox gộp 2 page.
- * Poll danh sách hội thoại mỗi 5s (background); thread đang mở poll tin nhắn mỗi 5s. */
+/* ShopDesk — Inbox 3 khung kiểu Sapo: danh sách hội thoại | khung chat | thông tin khách.
+ * Poll danh sách mỗi 5s (background); thread đang mở poll tin nhắn mỗi 5s. */
 "use strict";
 
 const POLL_MS = 5000;
+const AVATAR_GRADS = [
+  "linear-gradient(135deg,#8b5cf6,#6366f1)",
+  "linear-gradient(135deg,#1877f2,#0d5cc0)",
+  "linear-gradient(135deg,#f59e0b,#ef4444)",
+  "linear-gradient(135deg,#10b981,#0d9488)",
+  "linear-gradient(135deg,#ec4899,#8b5cf6)",
+  "linear-gradient(135deg,#06b6d4,#3b82f6)",
+];
+const STATUS_VI = { new: "Mới", pending: "Chờ xử lý", shipped: "Đã gửi hàng", done: "Hoàn tất", cancelled: "Đã hủy" };
 
 const state = {
-  pages: [],          // [{page_id, name, status, status_msg}]
-  convs: [],          // [{id, name, snippet, updated_time, unread, needs_reply, page_id, page_name}]
-  open: null,         // {page_id, page_name, conv_id, name, psid}
+  pages: [],
+  page_id: "",
+  convs: [],
+  open: null,          // {page_id, page_name, conv_id, name, psid, phone}
   lastMsgId: null,
-  assets: null,       // {hana:[...], bedan:[...]}
-  tags: {},           // "page_id/thread_id" -> [{tag, label, color, source}]
+  assets: null,
+  tags: {},            // "page_id/conv_id" -> [tags]
+  tagDefs: {},
+  filter: "",          // "" | "unreplied" | "closed"
+  search: "",
+  cust: null,          // customer record
+  custOrders: [],
   listLoading: false,
   msgLoading: false,
   msgTimer: null,
@@ -18,48 +33,73 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
-/* ---------------- Load hội thoại ---------------- */
+function avatarGrad(name) {
+  let h = 0;
+  for (const ch of String(name || "?")) h = (h * 31 + ch.codePointAt(0)) % 997;
+  return AVATAR_GRADS[h % AVATAR_GRADS.length];
+}
+function initialOf(name) {
+  return ((name || "?").trim().charAt(0) || "?").toUpperCase();
+}
+function normPhone(s) {
+  return String(s || "").replace(/\D/g, "").replace(/^84/, "0");
+}
+function findPhoneInMsgs(msgs) {
+  for (const m of [...msgs].reverse()) {
+    const t = String(m.text || "");
+    const mt = t.replace(/[\s.\-]/g, "").match(/0\d{9}/);
+    if (mt) return normPhone(mt[0]);
+  }
+  return "";
+}
+
+/* ---------------- Pages ---------------- */
+
+async function loadPages() {
+  try {
+    const j = await api("/api/pages");
+    state.pages = j.pages || [];
+  } catch (e) {
+    state.pages = [];
+    $("convList").innerHTML = `<div class="state-error">⚠️ ${esc(e.message)}</div>`;
+    return;
+  }
+  const sel = $("pageSel");
+  sel.innerHTML = state.pages.length
+    ? state.pages.map((p) => `<option value="${esc(p.page_id)}">${esc(p.name)}${p.status === "ok" ? "" : " ⚠️"}</option>`).join("")
+    : `<option value="">Chưa có page nào</option>`;
+  if (state.pages.length) {
+    state.page_id = state.pages[0].page_id;
+    sel.value = state.page_id;
+  }
+  sel.onchange = () => {
+    state.page_id = sel.value;
+    state.open = null;
+    resetChatPane();
+    resetCustPane();
+    loadConvs(false);
+  };
+}
+
+/* ---------------- Danh sách hội thoại ---------------- */
 
 async function loadConvs(background = false) {
-  if (state.listLoading) return;
+  if (state.listLoading || !state.page_id) return;
   state.listLoading = true;
-  if (!background) {
-    $("convList").innerHTML = `<div class="state-loading"><span class="spinner"></span>Đang tải hội thoại…</div>`;
-  }
+  if (!background) $("convList").innerHTML = `<div class="state-loading"><span class="spinner"></span>Đang tải hội thoại…</div>`;
   try {
-    const pj = await api("/api/pages");
-    state.pages = pj.pages || [];
-    renderPageStatus();
-
-    const all = [];
-    for (const pg of state.pages) {
-      try {
-        const cj = await api(`/api/pages/${encodeURIComponent(pg.page_id)}/conversations?limit=25`);
-        for (const c of (cj.conversations || [])) {
-          all.push({ ...c, page_id: pg.page_id, page_name: pg.name });
-        }
-      } catch (e) {
-        // Lỗi 1 page không chặn các page còn lại
-        console.warn("load convs", pg.page_id, e);
-      }
-    }
-    all.sort((a, b) => String(b.updated_time || "").localeCompare(String(a.updated_time || "")));
-    state.convs = all;
-    // Tag hội thoại (cache trong state, refresh mỗi lần loadConvs). API chưa có -> bỏ qua, vẫn hiển thị bình thường.
-    const tagMap = {};
-    const tagResults = await Promise.all(state.pages.map((pg) =>
-      api(`/api/inbox/tags/by-page/${encodeURIComponent(pg.page_id)}`)
-        .then((tj) => ({ pg, threads: (tj && tj.threads) || {} }))
-        .catch(() => ({ pg, threads: {} }))));
-    for (const { pg, threads } of tagResults) {
-      for (const [tid, tags] of Object.entries(threads)) {
-        tagMap[pg.page_id + "/" + tid] = tags || [];
-      }
-    }
-    state.tags = tagMap;
+    const cj = await api(`/api/pages/${encodeURIComponent(state.page_id)}/conversations?limit=25`);
+    state.convs = (cj.conversations || []).map((c) => ({ ...c, page_id: state.page_id }));
+    state.convs.sort((a, b) => String(b.updated_time || "").localeCompare(String(a.updated_time || "")));
+    try {
+      const tj = await api(`/api/inbox/tags/by-page/${encodeURIComponent(state.page_id)}`);
+      const threads = (tj && tj.threads) || {};
+      state.tags = {};
+      for (const [tid, tags] of Object.entries(threads)) state.tags[state.page_id + "/" + tid] = tags || [];
+    } catch (e) { /* tag chưa có: bỏ qua */ }
     renderConvList();
   } catch (e) {
-    if (!background || state.convs.length === 0) {
+    if (!background || !state.convs.length) {
       $("convList").innerHTML = `<div class="state-error">⚠️ ${esc(e.message)}<br>
         <button class="btn btn-sm" style="margin-top:8px" onclick="loadConvs(false)">Thử lại</button></div>`;
     }
@@ -68,26 +108,17 @@ async function loadConvs(background = false) {
   }
 }
 
-function renderPageStatus() {
-  const el = $("pageStatus");
-  if (!state.pages.length) { el.innerHTML = "Chưa cấu hình page nào. Vào Cài đặt để thêm."; return; }
-  el.innerHTML = state.pages.map((p) => {
-    const ok = p.status === "ok";
-    return `<div>${ok ? "🟢" : "🔴"} <b>${esc(p.name)}</b>${ok ? "" : ` <span class="err">— ${esc(p.status_msg || "lỗi kết nối")}</span>`}</div>`;
-  }).join("");
+function isClosedConv(c) {
+  const tags = state.tags[c.page_id + "/" + c.id] || [];
+  return tags.some((t) => ["chot_don", "da_chot_don"].includes(t.tag));
 }
 
-/** Hội thoại hiển thị sau khi áp bộ lọc tag + trạng thái trả lời (client-side). */
 function visibleConvs() {
-  const tag = $("tagFilter") ? $("tagFilter").value : "";
-  const reply = $("replyFilter") ? $("replyFilter").value : "";
+  const q = state.search.trim().toLowerCase();
   return state.convs.filter((c) => {
-    if (tag) {
-      const tags = state.tags[c.page_id + "/" + c.id] || [];
-      if (!tags.some((t) => t.tag === tag)) return false;
-    }
-    if (reply === "unreplied" && !c.needs_reply) return false;
-    if (reply === "replied" && c.needs_reply) return false;
+    if (state.filter === "unreplied" && !c.needs_reply) return false;
+    if (state.filter === "closed" && !isClosedConv(c)) return false;
+    if (q && !(String(c.name || "").toLowerCase().includes(q) || String(c.snippet || "").toLowerCase().includes(q))) return false;
     return true;
   });
 }
@@ -95,85 +126,71 @@ function visibleConvs() {
 function renderConvList() {
   const list = $("convList");
   const visible = visibleConvs();
-  $("convCount").textContent = visible.length === state.convs.length
-    ? state.convs.length : `${visible.length}/${state.convs.length}`;
   if (!visible.length) {
     list.innerHTML = state.convs.length
       ? `<div class="state-empty">🔎 Không có hội thoại nào khớp bộ lọc.</div>`
-      : `<div class="state-empty">📭 Chưa có hội thoại nào.<br>Kiểm tra page đã kết nối ở mục Cài đặt.</div>`;
+      : `<div class="state-empty">📭 Chưa có hội thoại nào.</div>`;
     return;
   }
   const scrollTop = list.scrollTop;
   list.innerHTML = visible.map((c) => {
-    const active = state.open && state.open.conv_id === c.id && state.open.page_id === c.page_id;
-    const initial = (c.name || "?").trim().charAt(0).toUpperCase() || "?";
-    const tags = state.tags[c.page_id + "/" + c.id] || [];
-    const unread = c.needs_reply ? "unreplied" : "";
+    const active = state.open && state.open.conv_id === c.id;
+    const closed = isClosedConv(c);
+    const tags = (state.tags[c.page_id + "/" + c.id] || []).slice(0, 2);
     return `
-    <div class="conv-item ${active ? "active" : ""}" data-page="${esc(c.page_id)}" data-conv="${esc(c.id)}"${c.needs_reply ? ' title="Chưa trả lời"' : ""}>
-      <div class="conv-avatar">${esc(initial)}</div>
-      <div class="conv-main">
-        <div class="conv-top">
-          <span class="conv-name ${unread}">${esc(c.name || "(không tên)")}</span>
-          <span class="conv-time">${esc(fmtRel(c.updated_time))}</span>
-        </div>
-        <div class="conv-snippet ${unread}">${esc(c.snippet || "")}</div>
-        <div class="conv-meta">
-          ${shopBadge(c.page_name)}
-          ${tags.map((t) => tagBadgeHTML(t)).join("")}
-          ${c.unread ? `<span class="unread-dot" title="Có tin chưa đọc"></span>` : ""}
-        </div>
+    <div class="conv-item ${active ? "active" : ""} ${c.needs_reply ? "unread" : ""}" data-conv="${esc(c.id)}">
+      <div class="avatar" style="background:${avatarGrad(c.name)}">${esc(initialOf(c.name))}</div>
+      <div class="cinfo">
+        <div class="cname">${c.needs_reply ? '<span class="dot"></span>' : ""}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name || "(không tên)")}</span></div>
+        <div class="snippet">${esc(c.snippet || "")}</div>
+        <div class="tags">${closed ? '<span class="badge-closed">ĐÃ CHỐT ĐƠN</span>' : ""}${tags.map((t) => `<span class="tagchip">${esc(t.label || t.tag)}</span>`).join("")}</div>
       </div>
+      <div class="ctime">${esc(fmtRel(c.updated_time))}</div>
     </div>`;
   }).join("");
   list.scrollTop = scrollTop;
   list.querySelectorAll(".conv-item").forEach((el) => {
-    el.addEventListener("click", () => {
-      openThread(el.dataset.page, el.dataset.conv);
-    });
+    el.addEventListener("click", () => openThread(el.dataset.conv));
   });
 }
 
-/* ---------------- Mở thread + poll tin nhắn ---------------- */
+/* ---------------- Mở thread ---------------- */
 
-async function openThread(page_id, conv_id) {
-  const c = state.convs.find((x) => x.page_id === page_id && x.id === conv_id);
-  const page = state.pages.find((p) => p.page_id === page_id);
-  state.open = {
-    page_id, conv_id,
-    name: c ? c.name : "",
-    page_name: page ? page.name : (c ? c.page_name : ""),
-    psid: null,
-  };
+function resetChatPane() {
+  $("chatHead").innerHTML = `<div class="empty-pane" style="padding:8px">👈 Chọn một hội thoại ở cột bên trái để bắt đầu</div>`;
+  $("chatMsgs").innerHTML = `<div class="state-empty">Chưa có tin nhắn nào.</div>`;
+  setComposer(false);
+}
+function resetCustPane() {
+  $("custBody").innerHTML = `<div class="empty-pane">Chọn hội thoại để xem<br>thông tin khách hàng</div>`;
+}
+
+async function openThread(conv_id) {
+  const c = state.convs.find((x) => x.id === conv_id);
+  if (!c) return;
+  const page = state.pages.find((p) => p.page_id === state.page_id) || {};
+  state.open = { page_id: state.page_id, page_name: page.name || "", conv_id, name: c.name || "", psid: null, phone: "" };
+  state.cust = null; state.custOrders = [];
   state.lastMsgId = null;
   if (state.msgTimer) { clearInterval(state.msgTimer); state.msgTimer = null; }
 
-  $("chatHeader").innerHTML = `
-    <div class="chat-top-row">
-      <div class="conv-avatar">${esc((state.open.name || "?").charAt(0).toUpperCase())}</div>
-      <div><div class="who">${esc(state.open.name || "(không tên)")}</div>
-      <div class="sub">${shopBadge(state.open.page_name)} · ${esc(fmtTime(c && c.updated_time))}</div></div>
-      <div class="actions"><button id="btnOrderTop" class="btn btn-sm">🧾 Tạo đơn</button></div>
-    </div>
-    <div class="tag-bar" id="tagBar">
-      <span class="spinner"></span><span style="font-size:12px;color:var(--muted)">Đang tải tag…</span>
+  const tags = state.tags[state.page_id + "/" + conv_id] || [];
+  $("chatHead").innerHTML = `
+    <div class="avatar" style="background:${avatarGrad(c.name)}">${esc(initialOf(c.name))}</div>
+    <div class="who">
+      <div class="nm">${esc(c.name || "(không tên)")}</div>
+      <div class="sub">${esc(page.name || "")} · ${tags.map((t) => `<span class="tagchip">${esc(t.label || t.tag)}</span>`).join(" ")}</div>
     </div>`;
-  $("btnOrderTop").addEventListener("click", openOrderModal);
-  $("chatMessages").innerHTML = `<div class="state-loading"><span class="spinner"></span>Đang tải tin nhắn…</div>`;
-
-  setComposerEnabled(false);
+  $("chatMsgs").innerHTML = `<div class="state-loading"><span class="spinner"></span>Đang tải tin nhắn…</div>`;
+  setComposer(false);
   renderConvList();
-  refreshThreadTags();
-  await loadMessages();
+  resetCustPane();
+  await loadMessages(false);
   state.msgTimer = setInterval(() => loadMessages(true), POLL_MS);
 }
 
-function setComposerEnabled(on) {
-  $("msgInput").disabled = !on;
-  $("btnSend").disabled = !on;
-  $("btnImg").disabled = !on;
-  $("btnOrder").disabled = !on;
-  if (on) $("msgInput").placeholder = "Nhập tin nhắn…";
+function setComposer(on) {
+  ["msgInput", "btnSend", "btnImg", "btnTag", "btnQuickOrder"].forEach((id) => { $(id).disabled = !on; });
 }
 
 async function loadMessages(background = false) {
@@ -186,77 +203,61 @@ async function loadMessages(background = false) {
     if (msgs.length) {
       const cust = [...msgs].reverse().find((m) => !m.mine && m.from_id);
       if (cust) state.open.psid = cust.from_id;
+      const phone = findPhoneInMsgs(msgs);
+      if (phone && phone !== state.open.phone) {
+        state.open.phone = phone;
+        loadCustomerPanel(phone);
+      }
     }
     const lastId = msgs.length ? msgs[msgs.length - 1].id : null;
     const changed = lastId !== state.lastMsgId;
     state.lastMsgId = lastId;
     if (changed || !background) {
       renderMessages(msgs);
-      setComposerEnabled(true);
+      setComposer(true);
     }
   } catch (e) {
-    if (!background) {
-      $("chatMessages").innerHTML = `<div class="state-error">⚠️ ${esc(e.message)}</div>`;
-    }
+    if (!background) $("chatMsgs").innerHTML = `<div class="state-error">⚠️ ${esc(e.message)}</div>`;
   } finally {
     state.msgLoading = false;
   }
 }
 
 function renderMessages(msgs) {
-  const box = $("chatMessages");
+  const box = $("chatMsgs");
   if (!msgs.length) { box.innerHTML = `<div class="state-empty">Chưa có tin nhắn nào.</div>`; return; }
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 90;
+  let lastDay = "";
   box.innerHTML = msgs.map((m) => {
-    const cls = m.mine ? "me" : "them";
+    const day = String(m.created_time || "").slice(0, 10);
+    const sep = day && day !== lastDay ? `<div class="day-sep">${esc(day.split("-").reverse().join("/"))}</div>` : "";
+    lastDay = day || lastDay;
     const atts = (m.attachments || []).map((a) => {
-      if (a.type === "image" && a.url) {
-        return `<a href="${esc(a.url)}" target="_blank" rel="noopener"><img class="att" src="${esc(a.url)}" alt="Ảnh đính kèm" loading="lazy"></a>`;
-      }
-      return `<div class="att-file">📎 Tệp đính kèm</div>`;
+      if (a.type === "image" && a.url) return `<a href="${esc(a.url)}" target="_blank" rel="noopener"><img class="att" src="${esc(a.url)}" loading="lazy"></a>`;
+      return `<div style="font-size:12px;margin-top:4px">📎 Tệp đính kèm</div>`;
     }).join("");
-    return `
-    <div class="msg ${cls}">
-      ${m.mine ? "" : `<div class="who">${esc(m.from_name || state.open.name || "")}</div>`}
-      <div class="bubble">${esc(m.text || "")}${atts}</div>
-      <div class="time">${esc(fmtTime(m.created_time))}</div>
-    </div>`;
+    return `${sep}<div class="msg ${m.mine ? "me" : "them"}">${m.text ? esc(m.text) : ""}${atts}<span class="ts">${esc(fmtTime(m.created_time))}</span></div>`;
   }).join("");
-  if (nearBottom || state.lastMsgId === null) box.scrollTop = box.scrollHeight;
+  if (nearBottom) box.scrollTop = box.scrollHeight;
 }
 
-/* ---------------- Gửi tin nhắn ---------------- */
+/* ---------------- Gửi tin nhắn / ảnh ---------------- */
 
 async function sendText() {
   const input = $("msgInput");
   const text = input.value.trim();
   if (!text || !state.open) return;
-  if (!state.open.psid) {
-    toast("Chưa xác định được người nhận (thread chưa có tin nhắn từ khách).", "warning");
-    return;
-  }
+  if (!state.open.psid) { toast("Chưa xác định được người nhận (thread chưa có tin nhắn từ khách).", "warning"); return; }
   $("btnSend").disabled = true;
   try {
     const j = await api(`/api/pages/${encodeURIComponent(state.open.page_id)}/send`, {
-      method: "POST",
-      body: JSON.stringify({ psid: state.open.psid, text }),
+      method: "POST", body: JSON.stringify({ psid: state.open.psid, text }),
     });
-    if (j.ok) {
-      input.value = "";
-      toast("Đã gửi ✓", "success", 1800);
-      await loadMessages();
-    } else {
-      toast(j.error_vi || "Gửi tin nhắn thất bại.", "error", 7000);
-    }
-  } catch (e) {
-    toast(e.message, "error", 7000);
-  } finally {
-    $("btnSend").disabled = false;
-    input.focus();
-  }
+    if (j.ok) { input.value = ""; await loadMessages(false); }
+    else toast(j.error_vi || "Gửi tin nhắn thất bại.", "error", 7000);
+  } catch (e) { toast(e.message, "error", 7000); }
+  finally { $("btnSend").disabled = false; input.focus(); }
 }
-
-/* ---------------- Ảnh nhanh ---------------- */
 
 async function ensureAssets() {
   if (state.assets) return state.assets;
@@ -264,8 +265,7 @@ async function ensureAssets() {
   return state.assets;
 }
 
-$("btnImg").addEventListener("click", async (e) => {
-  e.stopPropagation();
+async function toggleImgDropdown() {
   const dd = $("imgDropdown");
   if (!dd.classList.contains("hidden")) { dd.classList.add("hidden"); return; }
   if (!state.open) return;
@@ -273,259 +273,208 @@ $("btnImg").addEventListener("click", async (e) => {
   try {
     const assets = await ensureAssets();
     const files = assets[shop] || [];
-    if (!files.length) {
-      dd.innerHTML = `<div class="state-empty">Không có ảnh nào cho shop này.</div>`;
-    } else {
-      dd.innerHTML = files.map((f) => `
-        <div class="img-opt" data-file="${esc(f)}">
-          <img src="/static/${esc(f)}" alt="" loading="lazy">
-          <span class="fname">${esc(f)}</span>
-        </div>`).join("");
-      dd.querySelectorAll(".img-opt").forEach((el) => {
-        el.addEventListener("click", () => sendImage(el.dataset.file));
-      });
-    }
-  } catch (err) {
-    dd.innerHTML = `<div class="state-error">⚠️ ${esc(err.message)}</div>`;
-  }
+    dd.innerHTML = files.length
+      ? files.map((f) => `<img src="/static/${esc(f)}" data-file="${esc(f)}" loading="lazy" title="${esc(f)}">`).join("")
+      : `<div class="state-empty" style="grid-column:1/-1">Không có ảnh cho shop này.</div>`;
+    dd.querySelectorAll("img[data-file]").forEach((im) => {
+      im.addEventListener("click", () => sendImage(im.dataset.file));
+    });
+  } catch (e) { dd.innerHTML = `<div class="state-error">⚠️ ${esc(e.message)}</div>`; }
   dd.classList.remove("hidden");
-});
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".img-dropdown-wrap")) $("imgDropdown").classList.add("hidden");
-});
+}
 
 async function sendImage(file) {
   $("imgDropdown").classList.add("hidden");
-  if (!state.open || !state.open.psid) {
-    toast("Chưa xác định được người nhận.", "warning");
-    return;
-  }
+  if (!state.open || !state.open.psid) { toast("Chưa xác định được người nhận.", "warning"); return; }
   toast("Đang gửi ảnh…", "info", 2500);
   try {
     const j = await api(`/api/pages/${encodeURIComponent(state.open.page_id)}/send_image`, {
-      method: "POST",
-      body: JSON.stringify({ psid: state.open.psid, image: file }),
+      method: "POST", body: JSON.stringify({ psid: state.open.psid, image: file }),
     });
-    if (j.ok) { toast("Đã gửi ảnh ✓", "success", 2000); await loadMessages(); }
+    if (j.ok) { toast("Đã gửi ảnh ✓", "success", 2000); await loadMessages(false); }
     else toast(j.error_vi || "Gửi ảnh thất bại.", "error", 7000);
-  } catch (e) {
-    toast(e.message, "error", 7000);
-  }
+  } catch (e) { toast(e.message, "error", 7000); }
 }
 
-/* ---------------- Tag hội thoại ---------------- */
+/* ---------------- Tag ---------------- */
 
-async function refreshThreadTags() {
+function openTagModal() {
   if (!state.open) return;
-  const { page_id, conv_id } = state.open;
-  const bar = $("tagBar");
-  try {
-    const j = await api(`/api/inbox/${encodeURIComponent(page_id)}/${encodeURIComponent(conv_id)}/tags`);
-    const tags = (j && j.tags) || [];
-    state.tags[page_id + "/" + conv_id] = tags;
-    renderTagBar(tags);
-    renderConvList(); // đồng bộ badge trong danh sách
-  } catch (e) {
-    if (bar) {
-      bar.innerHTML = `<span style="font-size:12px;color:var(--muted)">Không tải được tag (${esc(e.message)})</span>`;
-    }
-  }
-}
-
-function renderTagBar(tags) {
-  const bar = $("tagBar");
-  if (!bar) return;
+  const tags = state.tags[state.open.page_id + "/" + state.open.conv_id] || [];
   const current = new Set(tags.map((t) => t.tag));
-  const opts = TAG_ORDER.filter((t) => !current.has(t))
-    .map((t) => `<option value="${t}">${esc(TAG_LABEL[t])}</option>`).join("");
-  bar.innerHTML = `
-    <span class="tag-bar-label" title="Tag hội thoại">🏷️</span>
-    ${tags.map((t) => tagBadgeHTML(t, true)).join("") || `<span style="font-size:12px;color:var(--muted)">Chưa gắn tag</span>`}
-    <select id="tagAdd" class="tag-add" title="Gắn tag cho hội thoại">
-      <option value="">+ Gắn tag</option>${opts}
-    </select>`;
-  bar.querySelectorAll(".tag-x").forEach((b) => {
-    b.addEventListener("click", (e) => { e.stopPropagation(); removeThreadTag(b.dataset.tag); });
-  });
-  bar.querySelector("#tagAdd").addEventListener("change", (e) => {
-    if (e.target.value) addThreadTag(e.target.value);
-  });
-}
-
-async function addThreadTag(tag) {
-  if (!state.open) return;
-  try {
-    const j = await api(`/api/inbox/${encodeURIComponent(state.open.page_id)}/${encodeURIComponent(state.open.conv_id)}/tags`, {
-      method: "POST", body: JSON.stringify({ tag }),
+  openModal("🏷️ Tag hội thoại",
+    `<div style="display:flex;flex-wrap:wrap;gap:8px">` +
+    TAG_ORDER.map((t) => `
+      <button class="btn btn-sm ${current.has(t) ? "btn-primary" : ""}" data-tag="${t}">
+        ${current.has(t) ? "✓ " : ""}${esc(TAG_LABEL[t] || t)}
+      </button>`).join("") + `</div>
+      <p class="hint">Bấm để gắn / gỡ tag. Tag "Đã chốt đơn" dùng để lọc ở cột trái.</p>`,
+    `<button class="btn" onclick="closeModal()">Đóng</button>`);
+  document.querySelectorAll("#modalRoot [data-tag]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const tag = b.dataset.tag;
+      const has = current.has(tag);
+      const url = `/api/inbox/${encodeURIComponent(state.open.page_id)}/${encodeURIComponent(state.open.conv_id)}/tags`;
+      try {
+        const j = await api(url, { method: has ? "DELETE" : "POST", body: JSON.stringify({ tag }) });
+        if (j && j.ok) {
+          const tj = await api(url);
+          state.tags[state.open.page_id + "/" + state.open.conv_id] = (tj && tj.tags) || [];
+          closeModal(); openTagModal(); renderConvList();
+          openThreadHeaderTags();
+        } else toast((j && j.error_vi) || "Lỗi tag.", "error");
+      } catch (e) { toast(e.message, "error"); }
     });
-    if (j && j.ok) { toast(`Đã gắn tag "${TAG_LABEL[tag] || tag}" ✓`, "success", 2000); refreshThreadTags(); }
-    else toast((j && j.error_vi) || "Gắn tag thất bại.", "error");
-  } catch (e) { toast(e.message, "error"); }
+  });
 }
 
-async function removeThreadTag(tag) {
+function openThreadHeaderTags() {
   if (!state.open) return;
-  try {
-    const j = await api(`/api/inbox/${encodeURIComponent(state.open.page_id)}/${encodeURIComponent(state.open.conv_id)}/tags`, {
-      method: "DELETE", body: JSON.stringify({ tag }),
-    });
-    if (j && j.ok) { toast("Đã gỡ tag ✓", "success", 1800); refreshThreadTags(); }
-    else toast((j && j.error_vi) || "Gỡ tag thất bại.", "error");
-  } catch (e) { toast(e.message, "error"); }
+  const tags = state.tags[state.open.page_id + "/" + state.open.conv_id] || [];
+  const sub = document.querySelector("#chatHead .sub");
+  if (sub) sub.innerHTML = `${esc(state.open.page_name)} · ${tags.map((t) => `<span class="tagchip">${esc(t.label || t.tag)}</span>`).join(" ")}`;
 }
 
-/* ---------------- Modal tạo đơn v2 ---------------- */
+/* ---------------- Panel thông tin khách (cột phải) ---------------- */
 
-/* ---------------- Modal tạo đơn v2 (chọn SKU, lookup khách cũ, tạo vận đơn) ---------------- */
-
-const _custCache = {}; // phone -> customer | null
-
-function normPhone(s) {
-  return String(s || "").replace(/\D/g, "").replace(/^84/, "0");
-}
-
-/** Blur SĐT -> tra khách cũ, tự điền tên/địa chỉ còn trống + toast. */
-async function lookupCustomerByPhone() {
-  const phoneEl = $("o_phone");
-  if (!phoneEl) return;
-  const phone = normPhone(phoneEl.value);
-  if (!phone || _custCache[phone] !== undefined) return;
+async function loadCustomerPanel(phone) {
+  const body = $("custBody");
+  body.innerHTML = `<div class="state-loading"><span class="spinner"></span>Đang tải thông tin khách…</div>`;
+  let cust = null, orders = [];
   try {
     const j = await api(`/api/customers/by-phone?phone=${encodeURIComponent(phone)}`);
-    const c = (j && j.customer) || null;
-    _custCache[phone] = c;
-    if (c) {
-      if ($("o_name") && !$("o_name").value.trim() && c.name) $("o_name").value = c.name;
-      if ($("o_addr") && !$("o_addr").value.trim() && c.address) $("o_addr").value = c.address;
-      toast("Đã tìm thấy thông tin khách cũ ✓", "success", 2500);
-    }
-  } catch (e) {
-    /* API chưa sẵn / không có khách: im lặng, không chặn tạo đơn */
-  }
+    cust = (j && j.customer) || null;
+  } catch (e) { /* khách mới */ }
+  try {
+    const oj = await api(`/api/orders?q=${encodeURIComponent(phone)}`);
+    orders = (oj && oj.orders) || [];
+  } catch (e) { /* bỏ qua */ }
+  state.cust = cust; state.custOrders = orders;
+  renderCustomerPanel(phone);
 }
 
-/** Preview tổng tiền client-side: tổng SKU×SL + ship (server tính lại khi lưu). */
-function updateQuickPreview(shop) {
-  const pv = $("o_preview");
-  if (!pv) return;
-  const items = skuPickerItems("o", shop);
-  const sub = items.reduce((s, x) => s + x.price * x.qty, 0);
-  const qty = items.reduce((s, x) => s + x.qty, 0);
-  const fee = shipFeeFor(shop, qty);
-  if (!items.length) {
-    pv.innerHTML = `<span style="color:var(--muted)">Chưa có dòng hàng nào.</span>`;
-    return;
-  }
-  const lines = items.map((x) => `
-    <div class="pv-row"><span>${esc(x.name || x.sku)} × ${x.qty}</span>
-    <span>${x.known ? fmtMoney(x.price * x.qty) : '<span class="pv-warn">SKU chưa có trong danh mục</span>'}</span></div>`).join("");
-  const feeNote = qty >= 2 ? "(miễn ship từ 2 đôi)" : qty === 1 ? "(phí ship 1 đôi)" : "";
-  pv.innerHTML = `
-    ${lines}
-    <div class="pv-row"><span>Tạm tính</span><span>${fmtMoney(sub)}</span></div>
-    <div class="pv-row"><span>Phí ship ${feeNote}</span><span>${fee ? fmtMoney(fee) : "Miễn phí"}</span></div>
-    <div class="pv-row pv-total"><span>Tổng dự kiến</span><span>${fmtMoney(sub + fee)}</span></div>
-    <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Máy chủ sẽ tính lại tổng tiền chính xác khi lưu đơn.</div>`;
-}
-
-function openOrderModal() {
-  if (!state.open) return;
-  const shop = shopKeyFromPageName(state.open.page_name) || "hana";
-  const shopName = SHOP_LABEL[shop] || state.open.page_name;
-  const carrierOpts = Object.keys(CARRIER_LABEL).filter((k) => k)
-    .map((k) => `<option value="${esc(k)}">${esc(CARRIER_LABEL[k])}</option>`).join("");
-  const body = `
-    <input type="hidden" id="o_shop" value="${esc(shop)}">
-    <label>Tên khách</label>
-    <input type="text" id="o_name" value="${esc(state.open.name || "")}">
-    <div class="form-row">
-      <div><label>Số điện thoại *</label><input type="tel" id="o_phone" placeholder="VD: 0901234567" autocomplete="off"></div>
-      <div><label>Shop</label><input type="text" value="${esc(shopName)}" disabled></div>
+function renderCustomerPanel(phone) {
+  const body = $("custBody");
+  const cust = state.cust || {};
+  const name = cust.name || (state.open && state.open.name) || "(chưa có tên)";
+  const addr = cust.address || "";
+  const notes = cust.notes || "";
+  const orders = state.custOrders || [];
+  body.innerHTML = `
+    <div class="cust-hero">
+      <div class="avatar" style="background:${avatarGrad(name)}">${esc(initialOf(name))}</div>
+      <div class="nm">${esc(name)}</div>
+      <div class="ph"><a href="tel:${esc(phone)}">📞 ${esc(phone)}</a></div>
+      <div style="margin-top:6px"><span class="tagchip">Bán lẻ</span> ${orders.length ? `<span class="tagchip">${orders.length} đơn</span>` : ""}</div>
     </div>
-    <label>Địa chỉ *</label>
-    <textarea id="o_addr" rows="2" placeholder="Ghi theo địa chỉ cũ trước sáp nhập…"></textarea>
-    <label>Sản phẩm (chọn theo SKU) *</label>
-    ${skuPickerHTML("o")}
-    <label>Ghi chú</label>
-    <input type="text" id="o_notes" placeholder="Màu, size…">
-    <label>Hãng vận chuyển</label>
-    <select id="o_carrier">
-      <option value="">Không tạo vận đơn</option>
-      ${carrierOpts}
-    </select>
-    <div id="o_preview" class="order-preview"></div>
-  `;
-  openModal("🧾 Tạo đơn hàng", body,
+    <div class="cust-sec">
+      <h4>📍 Địa chỉ <button class="btn btn-sm" id="btnEditAddr">Sửa</button></h4>
+      <div class="cust-addr" id="custAddr">${esc(addr) || '<span style="color:var(--muted)">Chưa có địa chỉ</span>'}</div>
+    </div>
+    <div class="cust-sec">
+      <h4>🧾 Đơn hàng (${orders.length})</h4>
+      <div id="custOrders">${orders.length ? orders.slice(0, 5).map((o) => `
+        <div class="order-mini"><span class="st">${esc(STATUS_VI[o.status] || o.status || "")}</span>
+          <div class="ot">#${o.id} · ${fmtMoney(o.total)}</div>
+          <div style="color:var(--muted)">${esc((o.created_at || "").slice(0, 10))} · ${esc(o.shop || "")}</div>
+        </div>`).join("") : '<div style="font-size:13px;color:var(--muted)">Chưa có đơn hàng nào.</div>'}</div>
+    </div>
+    <div class="cust-sec">
+      <h4>📝 Ghi chú</h4>
+      <textarea class="cust-note" id="custNote" placeholder="Ghi chú về khách hàng…">${esc(notes)}</textarea>
+      <button class="btn btn-sm" id="btnSaveNote" style="margin-top:6px">💾 Lưu ghi chú</button>
+    </div>
+    <button class="btn-order-big" id="btnGoLendon">🛍️ Tạo đơn (F1)</button>`;
+  $("btnGoLendon").addEventListener("click", goLendon);
+  $("btnSaveNote").addEventListener("click", saveCustNote);
+  $("btnEditAddr").addEventListener("click", editCustAddr);
+}
+
+function goLendon() {
+  if (!state.open) return;
+  const qs = new URLSearchParams();
+  if (state.open.phone) qs.set("phone", state.open.phone);
+  const nm = (state.cust && state.cust.name) || state.open.name || "";
+  if (nm) qs.set("name", nm);
+  const ad = (state.cust && state.cust.address) || "";
+  if (ad) qs.set("address", ad);
+  location.href = "/lendon?" + qs.toString();
+}
+
+async function saveCustNote() {
+  if (!state.cust) { toast("Chưa có hồ sơ khách hàng để lưu (khách mới).", "warning"); return; }
+  try {
+    const j = await api(`/api/customers/${state.cust.id}`, {
+      method: "PUT", body: JSON.stringify({ notes: $("custNote").value }),
+    });
+    if (j && j.ok !== false) { toast("Đã lưu ghi chú ✓", "success", 2000); state.cust.notes = $("custNote").value; }
+    else toast((j && j.error_vi) || "Lưu thất bại.", "error");
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function editCustAddr() {
+  const cur = (state.cust && state.cust.address) || "";
+  openModal("📍 Sửa địa chỉ khách",
+    `<textarea id="addrEdit" rows="3" style="width:100%">${esc(cur)}</textarea>`,
     `<button class="btn" onclick="closeModal()">Hủy</button>
-     <button class="btn btn-primary" id="o_save">Lưu đơn</button>`);
-  const modal = document.querySelector("#modalRoot .modal");
-  if (modal) modal.classList.add("wide");
-
-  $("o_phone").addEventListener("blur", lookupCustomerByPhone);
-  wireSkuPicker("o", shop, () => updateQuickPreview(shop));
-
-  $("o_save").addEventListener("click", async () => {
-    const items = skuPickerItems("o", shop);
-    const name = $("o_name").value.trim();
-    const phone = normPhone($("o_phone").value);
-    const addr = $("o_addr").value.trim();
-    const bad = items.find((x) => !x.known);
-    if (!phone || !addr) {
-      toast("Vui lòng nhập đủ: SĐT, địa chỉ.", "warning");
+     <button class="btn btn-primary" id="addrSave">Lưu</button>`);
+  $("addrSave").addEventListener("click", async () => {
+    const v = $("addrEdit").value.trim();
+    if (!state.cust) {
+      // Khách mới: tạo hồ sơ luôn để lưu địa chỉ
+      try {
+        const j = await api("/api/customers", {
+          method: "POST",
+          body: JSON.stringify({ name: (state.open && state.open.name) || "", phone: state.open.phone || "", address: v }),
+        });
+        if (j && j.ok !== false) { closeModal(); toast("Đã tạo hồ sơ khách ✓", "success"); loadCustomerPanel(state.open.phone); }
+        else toast((j && j.error_vi) || "Lưu thất bại.", "error");
+      } catch (e) { toast(e.message, "error"); }
       return;
     }
-    if (!items.length) {
-      toast("Vui lòng chọn ít nhất 1 sản phẩm (nhập SKU).", "warning");
-      return;
-    }
-    if (bad) {
-      toast(`SKU "${bad.sku}" chưa có trong danh mục sản phẩm.`, "warning");
-      return;
-    }
-    const carrier = $("o_carrier").value;
-    const payload = {
-      shop,
-      customer_name: name,
-      phone,
-      address: addr,
-      items: items.map((x) => ({ sku: x.sku, qty: x.qty })),
-      notes: $("o_notes").value.trim(),
-      source_thread: `fb:${state.open.page_id}/${state.open.conv_id}`,
-      create_shipment: carrier ? { carrier } : null,
-    };
-    $("o_save").disabled = true;
     try {
-      const j = await api("/api/orders/quick", { method: "POST", body: JSON.stringify(payload) });
-      if (j && j.ok) {
-        closeModal();
-        let msg = `Đã tạo đơn #${j.order_id} — ${fmtMoney(j.total)} ✓`;
-        if (j.shipping_code) msg += ` · Mã VC: ${j.shipping_code}`;
-        toast(msg, "success", 8000);
-        if (j.shipment_error_vi) toast("⚠️ " + j.shipment_error_vi, "warning", 8000);
-      } else {
-        toast((j && j.error_vi) || "Tạo đơn thất bại.", "error");
-      }
+      const j = await api(`/api/customers/${state.cust.id}`, { method: "PUT", body: JSON.stringify({ address: v }) });
+      if (j && j.ok !== false) { closeModal(); toast("Đã lưu địa chỉ ✓", "success"); state.cust.address = v; renderCustomerPanel(state.open.phone); }
+      else toast((j && j.error_vi) || "Lưu thất bại.", "error");
     } catch (e) { toast(e.message, "error"); }
-    finally { const b = $("o_save"); if (b) b.disabled = false; }
   });
 }
+
+/* ---------------- Bộ lọc / tìm kiếm / phím tắt ---------------- */
+
+document.querySelectorAll(".filter-tabs button").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".filter-tabs button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    state.filter = b.dataset.f;
+    renderConvList();
+  });
+});
+let searchTimer = null;
+$("convSearch").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.search = e.target.value; renderConvList(); }, 250);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "F3") { e.preventDefault(); $("convSearch").focus(); }
+  if (e.key === "F1") { e.preventDefault(); if (state.open) goLendon(); }
+});
+
+/* ---------------- Sự kiện composer ---------------- */
+
+$("btnSend").addEventListener("click", sendText);
+$("msgInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendText(); });
+$("btnImg").addEventListener("click", (e) => { e.stopPropagation(); toggleImgDropdown(); });
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#imgDropdown") && !e.target.closest("#btnImg")) $("imgDropdown").classList.add("hidden");
+});
+$("btnTag").addEventListener("click", openTagModal);
+$("btnQuickOrder").addEventListener("click", goLendon);
 
 /* ---------------- Khởi động ---------------- */
 
-/* Dựng option lọc tag từ TAG_LABEL dùng chung; gắn sự kiện lọc client-side. */
-(function initFilters() {
-  const tf = $("tagFilter");
-  tf.innerHTML = `<option value="">🏷️ Tất cả tag</option>` + TAG_ORDER.map((t) =>
-    `<option value="${t}">${esc(TAG_LABEL[t])}</option>`).join("");
-  tf.addEventListener("change", renderConvList);
-  $("replyFilter").addEventListener("change", renderConvList);
+(async function init() {
+  await loadPages();
+  await loadConvs(false);
+  setInterval(() => loadConvs(true), POLL_MS);
 })();
-
-$("btnSend").addEventListener("click", sendText);
-$("msgInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendText();
-});
-$("btnOrder").addEventListener("click", openOrderModal);
-
-loadConvs(false);
-setInterval(() => loadConvs(true), POLL_MS);

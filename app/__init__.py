@@ -28,6 +28,7 @@ def create_app():
     from .pages import pages_bp
     from .orders import orders_bp
     from .shipping import shipping_bp
+    from .fbconnect import fbconnect_bp
     from .products import products_bp, init_products
     from .customers import customers_bp, init_customers
     from .tags import tags_bp, init_conversation_tags
@@ -36,6 +37,7 @@ def create_app():
     app.register_blueprint(pages_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(shipping_bp)
+    app.register_blueprint(fbconnect_bp)
     app.register_blueprint(products_bp)
     app.register_blueprint(customers_bp)
     app.register_blueprint(tags_bp)

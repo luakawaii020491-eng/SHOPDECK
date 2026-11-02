@@ -58,6 +58,30 @@
     </div>
   </section>
 
+  <section class="card" style="border:1px solid #bcd3f7">
+    <h2>🔗 Kết nối Facebook <span style="font-size:12px;font-weight:400;color:var(--muted)">— kiểu Sapo: đăng nhập → quét page → cấp quyền từng page</span></h2>
+    <ol style="font-size:13.5px;line-height:1.8;color:#334155;margin:0 0 12px;padding-left:20px">
+      <li>Nhập <b>App ID</b> + <b>App Secret</b> của Facebook App (lấy tại <a href="https://developers.facebook.com" target="_blank">developers.facebook.com</a> → app → Cài đặt → Cơ bản) rồi bấm <b>Lưu</b>.</li>
+      <li>Trong app đó, vào <b>Sản phẩm → Facebook Login → Cài đặt</b>, thêm địa chỉ chuyển hướng bên dưới vào <b>Valid OAuth Redirect URIs</b> rồi lưu.</li>
+      <li>Bấm <b>🔗 Kết nối Facebook</b> → đăng nhập bằng tài khoản quản lý page → tick chọn page cho phép ShopDesk dùng → <b>Lưu</b>. Xong là page hiện ở Inbox, khỏi dán token tay.</li>
+    </ol>
+    <div class="form-row">
+      <div><label>Facebook App ID *</label><input type="text" id="fb_app_id" placeholder="VD: 1583157523552702"></div>
+      <div><label>App Secret *</label><input type="password" id="fb_app_secret" placeholder="Dán App Secret (chỉ lưu trên máy chủ)"></div>
+    </div>
+    <label>Địa chỉ chuyển hướng (Redirect URI) — copy dòng này vào Facebook Login</label>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="fb_redirect" readonly style="flex:1;background:#f1f5f9" value="Đang tải…">
+      <button class="btn btn-sm" id="btnCopyRedirect">📋 Copy</button>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn" id="btnSaveFbApp">💾 Lưu App ID/Secret</button>
+      <button class="btn btn-primary" id="btnFbConnect" style="background:#1877f2;border-color:#1877f2">🔗 Kết nối Facebook</button>
+      <span id="fbMsg" style="font-size:13px"></span>
+    </div>
+    <p class="hint">📌 App đang ở chế độ Development thì tài khoản dùng để kết nối phải có vai trò trong app (admin/developer/tester). Trên Render nên đặt App ID/Secret qua biến môi trường <code>SHOPDESK_FB_JSON</code> để sống qua redeploy.</p>
+  </section>
+
   <section class="card">
     <h2>🚚 Vận chuyển — API key các hãng</h2>
     <p style="color:var(--muted);font-size:13px;margin-top:0">

@@ -335,5 +335,16 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnCreatePrint").addEventListener("click", () => createOrder("print"));
   $("btnCreatePush").addEventListener("click", () => createOrder("push"));
   $("btnReset").addEventListener("click", resetForm);
+  // Prefill từ inbox (?phone=&name=&address=) — kiểu Sapo bấm "Tạo đơn" từ hội thoại
+  try {
+    const qs = new URLSearchParams(location.search);
+    const ph = (qs.get("phone") || "").trim();
+    const nm = (qs.get("name") || "").trim();
+    const ad = (qs.get("address") || "").trim();
+    if (ph) $("cPhone").value = ph;
+    if (nm) $("cName").value = nm;
+    if (ad) $("cAddress").value = ad;
+    if (ph) setTimeout(lookupPhone, 600); // tự tra khách cũ để điền nốt
+  } catch (e) { /* bỏ qua */ }
   renderLines();
 });
