@@ -267,6 +267,22 @@ def save_shipping_settings(carrier):
     return jsonify({"ok": True})
 
 
+# ---- Thông tin người gửi (in trên tem/phiếu giao hàng) ----
+
+@shipping_bp.get("/api/settings/sender")
+def get_sender_info():
+    return jsonify({"ok": True, "sender": config_mod.get_sender()})
+
+
+@shipping_bp.post("/api/settings/sender")
+def save_sender_info():
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return _err("Dữ liệu cài đặt không hợp lệ.")
+    sender = config_mod.set_sender(body)
+    return jsonify({"ok": True, "sender": sender})
+
+
 @shipping_bp.post("/api/settings/test")
 def test_settings():
     body = request.get_json(silent=True) or {}

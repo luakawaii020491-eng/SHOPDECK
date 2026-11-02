@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>In tem vận chuyển — ShopDesk</title>
+<style>
+  :root {
+    --brand: #f26522;
+    --brand-dark: #c24e12;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Arial, Helvetica, sans-serif; background: #e9edf3; color: #111; }
+
+  /* ---------- Thanh công cụ (chỉ hiện trên màn hình) ---------- */
+  .toolbar { max-width: 560px; margin: 16px auto; padding: 12px 16px; background: #fff; border-radius: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  .toolbar select { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .toolbar button { padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 14px; }
+  .toolbar button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+  .toolbar .hint { font-size: 12px; color: #64748b; width: 100%; }
+
+  /* ---------- Tem: khổ 100 x 150mm ---------- */
+  .sheet { display: flex; justify-content: center; padding: 16px; }
+  .label { width: 100mm; height: 150mm; background: #fff; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 24px rgba(0,0,0,.15); }
+
+  .l-head { background: var(--brand); color: #fff; padding: 3mm 4mm 2.5mm; display: flex; justify-content: space-between; align-items: center; }
+  .l-head .brand { font-size: 19pt; font-weight: 900; letter-spacing: .5px; line-height: 1; }
+  .l-head .brand small { display: block; font-size: 7.5pt; font-weight: 600; letter-spacing: .3px; opacity: .95; }
+  .l-head .doc { text-align: right; font-size: 9pt; font-weight: 800; line-height: 1.35; }
+  .l-head .doc small { font-weight: 600; font-size: 7.5pt; }
+
+  .l-barcode { padding: 2.5mm 4mm 1mm; text-align: center; border-bottom: 1px dashed #94a3b8; }
+  .l-barcode svg { width: 82mm; height: 14mm; }
+  .l-barcode .code { font-size: 13pt; font-weight: 900; letter-spacing: 3px; margin-top: .5mm; }
+
+  .l-parties { display: flex; border-bottom: 1px dashed #94a3b8; }
+  .l-party { flex: 1; padding: 2mm 4mm; font-size: 8.5pt; line-height: 1.45; }
+  .l-party + .l-party { border-left: 1px dashed #94a3b8; }
+  .l-party .tag { display: inline-block; background: var(--brand); color: #fff; font-weight: 800; font-size: 8pt; padding: .4mm 2mm; border-radius: 2mm; margin-bottom: 1mm; }
+  .l-party .name { font-weight: 800; font-size: 9.5pt; }
+  .l-party .phone { font-weight: 800; font-size: 11pt; }
+
+  .l-items { padding: 2mm 4mm; border-bottom: 1px dashed #94a3b8; font-size: 8.5pt; }
+  .l-items .t { font-weight: 800; font-size: 8pt; color: #475569; margin-bottom: 1mm; }
+  .l-items .it { display: flex; justify-content: space-between; padding: .6mm 0; }
+  .l-items .it span:last-child { white-space: nowrap; }
+
+  .l-money { display: flex; border-bottom: 1px dashed #94a3b8; }
+  .l-money .cell { flex: 1; padding: 2mm 4mm; }
+  .l-money .cell + .cell { border-left: 1px dashed #94a3b8; }
+  .l-money .t { font-size: 8pt; color: #475569; font-weight: 700; }
+  .l-money .cod { font-size: 16pt; font-weight: 900; color: #b91c1c; }
+  .l-money .wt { font-size: 11pt; font-weight: 800; }
+
+  .l-note { padding: 2mm 4mm; font-size: 8.5pt; line-height: 1.5; flex: 1; }
+  .l-note .t { font-weight: 800; font-size: 8pt; color: #475569; }
+
+  .l-foot { background: var(--brand); color: #fff; font-size: 7.5pt; font-weight: 600; padding: 1.8mm 4mm; display: flex; justify-content: space-between; }
+  .l-foot b { font-weight: 800; }
+
+  /* ---------- Màu theo hãng ---------- */
+  .carrier-ghn        { --brand: #f26522; --brand-dark: #c24e12; }
+  .carrier-ghtk       { --brand: #00a651; --brand-dark: #007a3d; }
+  .carrier-viettelpost{ --brand: #ed1c24; --brand-dark: #b30f16; }
+  .carrier-jt         { --brand: #d9261c; --brand-dark: #a01208; }
+  .carrier-best       { --brand: #005baa; --brand-dark: #003f77; }
+
+  @media print {
+    @page { size: 100mm 150mm; margin: 0; }
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { padding: 0; display: block; }
+    .label { box-shadow: none; width: 100mm; height: 150mm; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <label style="font-size:13px;font-weight:600">Mẫu tem:</label>
+  <select id="carrierSel">
+    <option value="ghn">GHN — Giao Hàng Nhanh</option>
+    <option value="ghtk">GHTK — Giao Hàng Tiết Kiệm</option>
+    <option value="viettelpost">Viettel Post</option>
+    <option value="jt">J&amp;T Express</option>
+    <option value="best">Best Express</option>
+  </select>
+  <button class="primary" onclick="window.print()">🖨️ In ngay</button>
+  <button onclick="window.close()">✕ Đóng</button>
+  <div class="hint">Khổ tem 100 × 150mm — khi in chọn khổ giấy 100×150mm (hoặc A6), tắt header/footer của trình duyệt. Mã vạch là mã vận đơn của hãng (nếu đơn chưa đẩy, tem in mã đơn ShopDesk).</div>
+</div>
+
+<div class="sheet">
+  <div class="label carrier-{{ carrier }}" id="labelEl">
+    <div class="l-head">
+      <div class="brand"><span id="cShort">GHN</span><small id="cName">GIAO HÀNG NHANH</small></div>
+      <div class="doc">PHIẾU GIAO HÀNG<small><br><span id="svcName">Tiêu chuẩn</span> · <span id="orderDate"></span></small></div>
+    </div>
+    <div class="l-barcode">
+      <svg id="barcode"></svg>
+      <div class="code" id="shipCode"></div>
+    </div>
+    <div class="l-parties">
+      <div class="l-party">
+        <span class="tag">TỪ</span>
+        <div class="name" id="sName"></div>
+        <div class="phone" id="sPhone"></div>
+        <div id="sAddr"></div>
+      </div>
+      <div class="l-party">
+        <span class="tag">ĐẾN</span>
+        <div class="name" id="rName"></div>
+        <div class="phone" id="rPhone"></div>
+        <div id="rAddr"></div>
+      </div>
+    </div>
+    <div class="l-items">
+      <div class="t">NỘI DUNG HÀNG</div>
+      <div id="itemList"></div>
+    </div>
+    <div class="l-money">
+      <div class="cell">
+        <div class="t">THU HỘ COD</div>
+        <div class="cod" id="codAmt"></div>
+      </div>
+      <div class="cell">
+        <div class="t">KHỐI LƯỢNG</div>
+        <div class="wt" id="weightAmt"></div>
+        <div class="t" style="margin-top:1mm">GIÁ TRỊ HÀNG</div>
+        <div style="font-weight:800;font-size:10pt" id="goodsVal"></div>
+      </div>
+    </div>
+    <div class="l-note">
+      <div class="t">GHI CHÚ GIAO HÀNG</div>
+      <div id="noteTxt"></div>
+    </div>
+    <div class="l-foot">
+      <span>Đơn <b id="orderNo"></b> · <span id="shopName"></span></span>
+      <span id="cShortFoot">GHN</span>
+    </div>
+  </div>
+</div>
+
+<script id="label-data" type="application/json">{{ label_json | safe }}</script>
+<script src="/static/js/jsbarcode.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var L = JSON.parse(document.getElementById("label-data").textContent);
+  var fmt = function (n) { return (Number(n) || 0).toLocaleString("vi-VN") + "đ"; };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+
+  var carrier = "{{ carrier }}";
+  var autoprint = {{ "true" if autoprint else "false" }};
+  document.getElementById("carrierSel").value = carrier;
+  document.getElementById("carrierSel").addEventListener("change", function () {
+    var u = new URL(location.href);
+    u.searchParams.set("carrier", this.value);
+    location.href = u.toString();
+  });
+
+  document.getElementById("cShort").textContent = L.carrier_short;
+  document.getElementById("cShortFoot").textContent = L.carrier_short;
+  document.getElementById("cName").textContent = L.carrier_name.toUpperCase();
+  document.getElementById("shipCode").textContent = L.shipping_code;
+  document.getElementById("orderDate").textContent = (L.created_at || "").slice(0, 10);
+
+  // Người gửi / người nhận
+  document.getElementById("sName").textContent = L.sender_name;
+  document.getElementById("sPhone").textContent = L.sender_phone;
+  document.getElementById("sAddr").textContent = L.sender_address;
+  document.getElementById("rName").textContent = L.customer_name || "(chưa có tên)";
+  document.getElementById("rPhone").textContent = L.phone;
+  document.getElementById("rAddr").textContent = L.address;
+
+  // Mã vạch Code128 của mã vận đơn
+  try {
+    JsBarcode("#barcode", String(L.shipping_code).replace(/[^ -~]/g, ""), {
+      format: "CODE128", displayValue: false, margin: 0, height: 52, width: 1.6
+    });
+  } catch (e) {
+    document.getElementById("barcode").outerHTML = '<div style="font-size:10pt;font-weight:700">(' + esc(L.shipping_code) + ")</div>";
+  }
+
+  // Nội dung hàng
+  var items = [];
+  try { items = JSON.parse(L.items || "[]"); } catch (e) {}
+  var goods = 0;
+  var html = items.map(function (it) {
+    var qty = Number(it.qty || it.quantity || 1);
+    var price = Number(it.price || 0);
+    goods += qty * price;
+    return '<div class="it"><span>' + esc(it.name || it.sku || "Sản phẩm") + ' × ' + qty + "</span><span>" + fmt(qty * price) + "</span></div>";
+  }).join("") || '<div class="it"><span>(chưa có chi tiết)</span><span></span></div>';
+  document.getElementById("itemList").innerHTML = html;
+
+  // Tiền thu hộ = tổng đơn (COD); nếu đơn đã thanh toán trước, thu hộ = 0
+  var cod = L.total;
+  if (/đã thanh toán/i.test(L.notes || "")) cod = 0;
+  document.getElementById("codAmt").textContent = fmt(cod);
+  document.getElementById("goodsVal").textContent = fmt(goods || L.total);
+  document.getElementById("weightAmt").textContent = "(theo hãng VC)";
+  document.getElementById("noteTxt").textContent = L.notes || "—";
+  document.getElementById("orderNo").textContent = "#" + L.order_id;
+  document.getElementById("shopName").textContent = L.shop;
+
+  // Tên gói dịch vụ từ ghi chú (nếu có)
+  var m = /Gói VC:\s*([^|]+)/.exec(L.notes || "");
+  if (m) document.getElementById("svcName").textContent = m[1].trim();
+
+  if (autoprint) setTimeout(function () { window.print(); }, 400);
+})();
+</script>
+</body>
+</html>

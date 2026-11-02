@@ -244,3 +244,45 @@ async function testCarrier(carrier) {
 
 loadPages();
 loadShipping();
+
+/* ---------------- Thông tin người gửi (in tem) ---------------- */
+
+async function loadSender() {
+  try {
+    const j = await api("/api/settings/sender");
+    const s = (j && j.sender) || {};
+    $("s_shop").value = s.shop_name || "";
+    $("s_phone").value = s.sender_phone || "";
+    $("s_addr").value = s.sender_address || "";
+  } catch (e) { /* bỏ qua */ }
+}
+
+async function saveSender() {
+  const msg = $("senderMsg");
+  msg.textContent = "⏳ Đang lưu…";
+  msg.style.color = "var(--muted)";
+  try {
+    const j = await api("/api/settings/sender", {
+      method: "POST",
+      body: JSON.stringify({
+        shop_name: $("s_shop").value.trim(),
+        sender_phone: $("s_phone").value.trim(),
+        sender_address: $("s_addr").value.trim(),
+      }),
+    });
+    if (j.ok) {
+      msg.textContent = "✅ Đã lưu.";
+      msg.style.color = "var(--success)";
+      toast("Đã lưu thông tin người gửi ✓", "success");
+    } else {
+      msg.textContent = "❌ " + (j.error_vi || "Lưu thất bại.");
+      msg.style.color = "var(--danger)";
+    }
+  } catch (e) {
+    msg.textContent = "❌ " + e.message;
+    msg.style.color = "var(--danger)";
+  }
+}
+
+$("btnSaveSender").addEventListener("click", saveSender);
+loadSender();

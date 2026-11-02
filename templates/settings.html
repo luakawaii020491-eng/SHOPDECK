@@ -12,6 +12,7 @@
   <div class="nav-links">
     <a href="/" data-nav="inbox">📥 Inbox</a>
     <a href="/orders" data-nav="orders">🧾 Đơn hàng</a>
+    <a href="/lendon" data-nav="lendon">📝 Lên đơn</a>
     <a href="/products" data-nav="products">📦 Sản phẩm</a>
     <a href="/customers" data-nav="customers">👥 Khách hàng</a>
     <a href="/settings" data-nav="settings">⚙️ Cài đặt</a>
@@ -36,6 +37,24 @@
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary" id="btnAddPage">Thêm page</button>
       <span style="font-size:12.5px;color:var(--muted)">Token lưu trong config.json của máy chủ, không hiển thị lại.</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>🏪 Thông tin người gửi — in trên tem/phiếu giao hàng</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:0">
+      Thông tin này in ở mục "TỪ" trên mọi mẫu tem vận chuyển. Trên Render có thể đặt qua biến môi trường
+      <code>SHOPDESK_SENDER_JSON</code> để sống qua mỗi lần deploy.
+    </p>
+    <div class="form-row">
+      <div><label>Tên shop *</label><input type="text" id="s_shop" placeholder="VD: Shop Dép Xinh"></div>
+      <div><label>SĐT người gửi *</label><input type="tel" id="s_phone" placeholder="VD: 09xxxxxxxx"></div>
+    </div>
+    <label>Địa chỉ lấy hàng / kho *</label>
+    <input type="text" id="s_addr" placeholder="VD: 123 Đường ABC, Phường X, Quận Y, TP.HCM">
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" id="btnSaveSender">💾 Lưu thông tin người gửi</button>
+      <span id="senderMsg" style="font-size:13px"></span>
     </div>
   </section>
 

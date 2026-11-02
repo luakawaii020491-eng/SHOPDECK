@@ -19,7 +19,17 @@ DEFAULT_CONFIG = {
         "jt": {},           # api_account, customer_code, private_key
         "best": {},         # username, password
     },
+    # Thông tin người gửi — in trên tem/phiếu giao hàng (trang Cài đặt > mục "Người gửi")
+    "sender": {
+        "shop_name": "",
+        "sender_phone": "",
+        "sender_address": "",
+    },
 }
+
+# Env var cho thông tin người gửi (deploy cloud: sống qua redeploy):
+#   SHOPDESK_SENDER_JSON = '{"shop_name":"...","sender_phone":"...","sender_address":"..."}'
+SENDER_ENV_VAR = "SHOPDESK_SENDER_JSON"
 
 CARRIERS = ["ghn", "ghtk", "viettelpost", "jt", "best"]
 
@@ -48,6 +58,11 @@ def load_config():
         for c in CARRIERS:
             if isinstance(ship.get(c), dict):
                 merged["shipping"][c].update(ship[c])
+        sender = cfg.get("sender") or {}
+        if isinstance(sender, dict):
+            for k in merged["sender"]:
+                if isinstance(sender.get(k), str) and sender[k].strip():
+                    merged["sender"][k] = sender[k].strip()
     # Gộp danh sách page từ biến môi trường vào (deploy cloud: token trong env
     # sống qua mỗi lần deploy, không phải nhập lại). Env thắng khi trùng page_id;
     # page chỉ có trong file (thêm qua trang Settings) vẫn hiện bình thường.
@@ -82,6 +97,18 @@ def load_config():
                         for k, v in fields.items():
                             if isinstance(v, str) and v.strip():
                                 merged["shipping"][carrier][k] = v.strip()
+        except (json.JSONDecodeError, ValueError):
+            pass
+    # Gộp thông tin người gửi từ biến môi trường (deploy cloud: sống qua redeploy)
+    env_sender = os.environ.get(SENDER_ENV_VAR, "").strip()
+    if env_sender:
+        try:
+            parsed = json.loads(env_sender)
+            if isinstance(parsed, dict):
+                for k in merged["sender"]:
+                    v = parsed.get(k)
+                    if isinstance(v, str) and v.strip():
+                        merged["sender"][k] = v.strip()
         except (json.JSONDecodeError, ValueError):
             pass
     return merged
@@ -152,3 +179,26 @@ def shipping_status_masked():
         creds = cfg.get("shipping", {}).get(c, {}) or {}
         out[c] = {f"{k}_set": bool(v) for k, v in creds.items()}
     return out
+
+
+# ---- Thông tin người gửi (in trên tem/phiếu giao hàng) ----
+
+SENDER_FIELDS = ["shop_name", "sender_phone", "sender_address"]
+
+
+def get_sender():
+    """Trả về dict thông tin người gửi (đã gộp env var)."""
+    return dict(load_config().get("sender", {}) or {})
+
+
+def set_sender(fields):
+    cfg = load_config()
+    cur = cfg.get("sender") or {}
+    for k, v in (fields or {}).items():
+        if k not in SENDER_FIELDS:
+            continue
+        v = str(v or "").strip()
+        cur[k] = v
+    cfg["sender"] = cur
+    save_config(cfg)
+    return cur

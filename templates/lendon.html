@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lên đơn — ShopDesk</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  .lendon-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1080px) { .lendon-grid { grid-template-columns: 1fr; } }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  .prod-search { position: relative; }
+  .prod-results { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; max-height: 260px; overflow: auto; z-index: 50; box-shadow: 0 8px 24px rgba(20,40,80,.12); display: none; }
+  .prod-results.show { display: block; }
+  .prod-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eef1f6; font-size: 13px; }
+  .prod-item:hover { background: #f4f8ff; }
+  .prod-item .sku { color: var(--muted); font-size: 11.5px; }
+  .prod-item .price { float: right; font-weight: 700; color: var(--primary-dark); }
+  table.lines { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.lines th, table.lines td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eef1f6; }
+  table.lines th { background: #f6f9fd; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .qty-ctl { display: inline-flex; align-items: center; gap: 6px; }
+  .qty-ctl button { width: 24px; height: 24px; border: 1px solid var(--border); background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1; }
+  .qty-ctl input { width: 52px; text-align: center; }
+  .pay-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; font-size: 13.5px; border-bottom: 1px dashed #eef1f6; }
+  .pay-row .val { font-weight: 600; }
+  .pay-row input[type=number] { width: 130px; text-align: right; }
+  .pay-total { font-size: 20px; font-weight: 800; color: var(--primary-dark); }
+  .pay-cod { font-size: 15px; font-weight: 700; color: var(--danger); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #successPanel { display: none; }
+  #successPanel.show { display: block; }
+  .success-box { border: 2px solid var(--success); background: #f0fbf4; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+  .dim3 { display: flex; gap: 8px; }
+  .dim3 input { width: 100%; }
+  label.fld { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+  label.fld:first-child { margin-top: 0; }
+</style>
+</head>
+<body data-page="lendon">
+<nav class="topnav">
+  <div class="brand">🛍️ ShopDesk</div>
+  <div class="nav-links">
+    <a href="/" data-nav="inbox">📥 Inbox</a>
+    <a href="/orders" data-nav="orders">🧾 Đơn hàng</a>
+    <a href="/lendon" data-nav="lendon">📝 Lên đơn</a>
+    <a href="/products" data-nav="products">📦 Sản phẩm</a>
+    <a href="/customers" data-nav="customers">👥 Khách hàng</a>
+    <a href="/settings" data-nav="settings">⚙️ Cài đặt</a>
+  </div>
+</nav>
+
+<main class="page">
+  <div class="page-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <h1 style="margin:0">📝 Lên đơn <span style="font-size:13px;font-weight:400;color:var(--muted)">— tạo đơn hàng nhanh như Sapo</span></h1>
+    <div class="head-actions">
+      <button class="btn" id="btnReset">↺ Làm mới</button>
+      <button class="btn btn-primary" id="btnCreate">💾 Tạo đơn</button>
+      <button class="btn" id="btnCreatePrint">🖨️ Tạo đơn &amp; In tem</button>
+      <button class="btn" id="btnCreatePush">🚚 Tạo đơn &amp; Đẩy đơn</button>
+    </div>
+  </div>
+
+  <div id="successPanel"></div>
+
+  <div class="lendon-grid">
+    <!-- ============ CỘT TRÁI ============ -->
+    <div>
+      <section class="card" style="margin-bottom:16px">
+        <h2>👤 Thông tin khách hàng</h2>
+        <div class="form-row">
+          <div>
+            <label class="fld">Tên khách hàng</label>
+            <input type="text" id="cName" placeholder="VD: Nguyễn Thị Lan">
+          </div>
+          <div>
+            <label class="fld">Số điện thoại *</label>
+            <div style="display:flex;gap:8px">
+              <input type="tel" id="cPhone" placeholder="VD: 09xxxxxxxx" style="flex:1">
+              <button class="btn btn-sm" id="btnLookupPhone" title="Tra khách cũ theo SĐT để tự điền tên + địa chỉ">🔍 Tra KH cũ</button>
+            </div>
+          </div>
+        </div>
+        <label class="fld">Địa chỉ nhận hàng *</label>
+        <textarea id="cAddress" rows="2" placeholder="Số nhà, thôn/xóm, xã/phường, huyện, tỉnh (ghi theo địa chỉ cũ trước sáp nhập)"></textarea>
+        <label class="fld">Ghi chú khách hàng</label>
+        <input type="text" id="cNote" placeholder="VD: gọi trước khi giao, giao giờ hành chính…">
+      </section>
+
+      <section class="card">
+        <h2>📦 Thông tin sản phẩm</h2>
+        <div class="prod-search">
+          <input type="text" id="pSearch" placeholder="🔎 Tìm sản phẩm theo tên hoặc SKU… (VD: kem, XINH-QN-KEM-37)" autocomplete="off">
+          <div class="prod-results" id="pResults"></div>
+        </div>
+        <div style="margin-top:12px;overflow-x:auto">
+          <table class="lines">
+            <thead>
+              <tr><th style="width:38%">Sản phẩm</th><th>SKU</th><th style="width:110px">Giá</th><th style="width:130px">Số lượng</th><th style="width:110px">Thành tiền</th><th style="width:40px"></th></tr>
+            </thead>
+            <tbody id="lineRows">
+              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">Chưa có sản phẩm nào — tìm và thêm ở ô phía trên.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="hint" id="weightHint"></div>
+      </section>
+    </div>
+
+    <!-- ============ CỘT PHẢI ============ -->
+    <div>
+      <section class="card" style="margin-bottom:16px">
+        <h2>💰 Thanh toán</h2>
+        <label class="fld">Shop</label>
+        <select id="payShop">
+          <option value="hana">Dép Hana — sục khoét lỗ</option>
+          <option value="bedan">Shop Bé Đan — sục đế 3 phân</option>
+          <option value="xinh">Dép Xinh — quai ngang siêu êm</option>
+        </select>
+        <div class="pay-row" style="margin-top:8px"><span>Tổng tiền hàng</span><span class="val" id="payGoods">0đ</span></div>
+        <div class="pay-row"><span>Phí giao hàng</span><input type="number" id="payShip" min="0" step="1000" value="0"></div>
+        <div class="pay-row"><span>Giảm giá</span><input type="number" id="payDiscount" min="0" step="1000" value="0"></div>
+        <div class="hint" id="priceNote"></div>
+        <div class="pay-row" style="border:none;padding-top:10px"><span style="font-weight:700">Tổng cộng</span><span class="pay-total" id="payTotal">0đ</span></div>
+        <div class="pay-row" style="border:none"><span>Thu hộ COD</span><span class="pay-cod" id="payCod">0đ</span></div>
+        <label class="fld">Phương thức thanh toán</label>
+        <select id="payMethod">
+          <option value="cod">💵 COD — thu tiền khi giao hàng</option>
+          <option value="paid">✅ Khách đã thanh toán trước</option>
+          <option value="bank">🏦 Chuyển khoản</option>
+        </select>
+      </section>
+
+      <section class="card">
+        <h2>🚚 Đóng gói &amp; Giao hàng</h2>
+        <label class="fld">Hãng vận chuyển</label>
+        <select id="shipCarrier">
+          <option value="ghn">Giao Hàng Nhanh (GHN)</option>
+          <option value="ghtk">Giao Hàng Tiết Kiệm (GHTK)</option>
+          <option value="viettelpost">Viettel Post</option>
+          <option value="jt">J&amp;T Express</option>
+          <option value="best">Best Express</option>
+        </select>
+        <label class="fld">Gói dịch vụ</label>
+        <select id="shipService">
+          <option value="standard">📦 Tiêu chuẩn</option>
+          <option value="express">⚡ Nhanh</option>
+          <option value="economy">🐢 Tiết kiệm</option>
+        </select>
+        <div class="form-row">
+          <div>
+            <label class="fld">Khối lượng (gram)</label>
+            <input type="number" id="shipWeight" min="0" step="10" value="0">
+          </div>
+          <div>
+            <label class="fld">Giá trị hàng / bảo hiểm (đ)</label>
+            <input type="number" id="shipValue" min="0" step="1000" value="0">
+          </div>
+        </div>
+        <label class="fld">Kích thước gói hàng (cm) — dài × rộng × cao</label>
+        <div class="dim3">
+          <input type="number" id="dimL" placeholder="Dài" min="0">
+          <input type="number" id="dimW" placeholder="Rộng" min="0">
+          <input type="number" id="dimH" placeholder="Cao" min="0">
+        </div>
+        <label class="fld">Yêu cầu khi giao</label>
+        <select id="shipRequire">
+          <option value="view">👀 Cho xem hàng, không cho thử</option>
+          <option value="cod_check">🔍 Được đồng kiểm hàng</option>
+          <option value="noview">🚫 Không cho xem hàng</option>
+        </select>
+        <label class="fld">Ghi chú cho shipper</label>
+        <textarea id="shipNote" rows="2" placeholder="VD: hàng dễ vỡ, gọi trước 30 phút…"></textarea>
+        <div class="hint">⚠️ Đẩy đơn cần nhập API key của hãng ở trang <a href="/settings">⚙️ Cài đặt</a> trước.</div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/lendon.js"></script>
+</body>
+</html>
